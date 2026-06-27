@@ -1,6 +1,6 @@
 import numpy as np
 
-from padic_quant.inference import build_quantized_mlp, evaluate_quantized
+from dyadic_quant.inference import build_quantized_mlp, evaluate_quantized
 
 
 def test_large_modulus_matches_wide_accumulator():

@@ -1,6 +1,6 @@
 import numpy as np
 
-from padic_quant.arithmetic import centered_mod, crt2_centered
+from dyadic_quant.arithmetic import centered_mod, crt2_centered
 
 
 def test_centered_mod_even_and_odd_moduli():

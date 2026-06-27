@@ -505,7 +505,7 @@ excluded parameters.
 Artifacts:
 
 - `experiments/run_resnet18_dyadic.py`;
-- `padic_quant/dyadic_torch.py`;
+- `dyadic_quant/dyadic_torch.py`;
 - `results/resnet18_dyadic_results.csv`;
 - `results/resnet18_dyadic_metadata.json`.
 
@@ -901,7 +901,7 @@ WikiText continuations (10 prompts):
 
 ### 12.4 Artifacts and commands
 
-- `padic_quant/textgen.py`;
+- `dyadic_quant/textgen.py`;
 - `experiments/run_textual_generation.py`;
 - `experiments/compare_generations.py`;
 - `experiments/run_textual_comparison.py`;

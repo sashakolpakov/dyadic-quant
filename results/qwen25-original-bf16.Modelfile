@@ -2,7 +2,7 @@
 # To build a new Modelfile based on this, replace FROM with:
 # FROM qwen2.5:0.5b
 
-FROM /Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf
+FROM /Users/sasha/dyadic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf
 TEMPLATE """{{- if .Messages }}
 {{- if or .System .Tools }}<|im_start|>system
 {{- if .System }}

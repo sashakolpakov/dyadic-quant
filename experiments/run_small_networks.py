@@ -19,13 +19,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from padic_quant.arithmetic import (
+from dyadic_quant.arithmetic import (
     entropy_bits,
     largest_prime_power_below,
     packed_bytes,
 )
-from padic_quant.inference import build_quantized_mlp, evaluate_quantized
-from padic_quant.model import train_mlp
+from dyadic_quant.inference import build_quantized_mlp, evaluate_quantized
+from dyadic_quant.model import train_mlp
 
 
 RNS_BY_BITS = {

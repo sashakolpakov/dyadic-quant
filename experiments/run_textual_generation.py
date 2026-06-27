@@ -27,8 +27,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from padic_quant.dyadic_torch import encode_model, materialize_prefix
-from padic_quant.textgen import (
+from dyadic_quant.dyadic_torch import encode_model, materialize_prefix
+from dyadic_quant.textgen import (
     build_arc_prompts,
     build_wikitext_prompts,
     generate_texts,

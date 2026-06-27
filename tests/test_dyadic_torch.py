@@ -1,6 +1,6 @@
 import torch
 
-from padic_quant.dyadic_torch import (
+from dyadic_quant.dyadic_torch import (
     encode_tensor_per_output_channel,
     storage_bytes,
 )
@@ -74,7 +74,7 @@ def test_storage_adds_exactly_one_plane_per_refinement():
         torch.nn.ReLU(),
         torch.nn.Linear(4, 2),
     )
-    from padic_quant.dyadic_torch import encode_model
+    from dyadic_quant.dyadic_torch import encode_model
 
     encoded = encode_model(model, max_bits=8)
     size_4 = storage_bytes(model, encoded, bits=4)
@@ -93,7 +93,7 @@ def test_tied_embedding_and_output_weight_is_encoded_once():
             self.proj = torch.nn.Linear(8, 16, bias=False)
             self.proj.weight = self.embed.weight
 
-    from padic_quant.dyadic_torch import encode_model
+    from dyadic_quant.dyadic_torch import encode_model
 
     model = TiedModel()
     encoded = encode_model(model, max_bits=8)
@@ -104,7 +104,7 @@ def test_tied_embedding_and_output_weight_is_encoded_once():
 
 
 def test_packed_artifact_contains_sign_and_maximum_depth_code(tmp_path):
-    from padic_quant.dyadic_torch import encode_model, save_encoded_model
+    from dyadic_quant.dyadic_torch import encode_model, save_encoded_model
 
     model = torch.nn.Sequential(torch.nn.Linear(4, 3, bias=False))
     encoded = encode_model(

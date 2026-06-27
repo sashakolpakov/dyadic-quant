@@ -1,4 +1,4 @@
-# Progressive dyadic and p-adic quantization experiments
+# Progressive dyadic quantization experiments
 
 This repository contains experiments on low-bit neural-network representations
 with two related threads:
@@ -97,7 +97,7 @@ packed-kernel speed claim.
 
 ## Repository contents
 
-- `padic_quant/`: reusable arithmetic, inference, dyadic encoding, and text
+- `dyadic_quant/`: reusable arithmetic, inference, dyadic encoding, and text
   generation helpers.
 - `experiments/`: experiment drivers for small MLPs, ResNet-18, Qwen2.5,
   controlled GGUF baselines, block-size sweeps, and textual comparison.

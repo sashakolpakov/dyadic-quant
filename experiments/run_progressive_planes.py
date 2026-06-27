@@ -18,8 +18,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from padic_quant.model import train_mlp
-from padic_quant.progressive import build_progressive_model, evaluate_representation
+from dyadic_quant.model import train_mlp
+from dyadic_quant.progressive import build_progressive_model, evaluate_representation
 
 
 def load_dataset(name: str, seed: int):

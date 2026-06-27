@@ -2,7 +2,7 @@ import json
 
 import torch
 
-from padic_quant.textgen import (
+from dyadic_quant.textgen import (
     build_wikitext_prompts,
     cosine_similarity,
     edit_ratio,

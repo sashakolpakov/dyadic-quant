@@ -1,6 +1,6 @@
 import numpy as np
 
-from padic_quant.progressive import (
+from dyadic_quant.progressive import (
     build_progressive_model,
     reconstruct_layer,
 )

@@ -1,8 +1,8 @@
 {
   "arguments": {
-    "model_dir": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct",
+    "model_dir": "/Users/sasha/dyadic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct",
     "gguf_file": null,
-    "data_dir": "/Users/sasha/p-adic-quant/data/llm_eval",
+    "data_dir": "/Users/sasha/dyadic-quant/data/llm_eval",
     "bits": [
       4,
       5,
@@ -21,7 +21,7 @@
     "reference_predictions": null,
     "save_reference_predictions": null,
     "save_dyadic": null,
-    "output_dir": "/Users/sasha/p-adic-quant/results"
+    "output_dir": "/Users/sasha/dyadic-quant/results"
   },
   "device": "mps",
   "torch": "2.12.1",
