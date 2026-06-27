@@ -1,0 +1,9 @@
+{
+  "model": "qwen25-original-bf16",
+  "questions": 100,
+  "arc_easy_generation_accuracy": 0.63,
+  "valid_letter_rate": 0.98,
+  "prompt_tokens_per_s": 4456.362342190728,
+  "generation_tokens_per_s": 218.60650375073413,
+  "wall_elapsed_s": 9.71792654087767
+}

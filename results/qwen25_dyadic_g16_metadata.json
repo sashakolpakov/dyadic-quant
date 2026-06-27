@@ -1,0 +1,35 @@
+{
+  "arguments": {
+    "model_dir": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct",
+    "gguf_file": null,
+    "data_dir": "/Users/sasha/p-adic-quant/data/llm_eval",
+    "bits": [
+      4,
+      5,
+      6,
+      8
+    ],
+    "max_tokens": 8192,
+    "sequence_length": 256,
+    "arc_limit": 100,
+    "dtype": "bfloat16",
+    "reference_only": false,
+    "keep_embedding_fp16": false,
+    "group_size": 16,
+    "embedding_bits": 0,
+    "variant_name": "qwen25_dyadic_g16",
+    "reference_predictions": null,
+    "save_reference_predictions": null,
+    "save_dyadic": null,
+    "output_dir": "/Users/sasha/p-adic-quant/results"
+  },
+  "device": "mps",
+  "torch": "2.12.1",
+  "evaluation_dtype": "bfloat16",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "quantized_weight_count": 493961216,
+  "exponent_count": 30872576,
+  "excluded_modules": [],
+  "reference_only": false,
+  "reference_note": "The source checkpoint is evaluated directly in bfloat16."
+}

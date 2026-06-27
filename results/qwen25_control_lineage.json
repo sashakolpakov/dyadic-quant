@@ -1,0 +1,143 @@
+{
+  "source": {
+    "repository": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct/model.safetensors",
+    "size_bytes": 988097824,
+    "sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+    "tensor_dtype": "bfloat16"
+  },
+  "llama_cpp": {
+    "directory": "/private/tmp/llama.cpp",
+    "commit": "dec5ca5577d6042b4e870fadf4087c5b9b8d3a70"
+  },
+  "bf16_gguf": {
+    "file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+    "size_bytes": 994156448,
+    "sha256": "61e4f6761f30aec4fa1af6067c2b7fa15452e68af152edd7ebdb94e619a33d24",
+    "tensor_count": 290,
+    "tensor_types": {
+      "BF16": 169,
+      "F32": 121
+    },
+    "conversion_command": [
+      "/Users/sasha/.venvs/global/bin/python",
+      "/private/tmp/llama.cpp/convert_hf_to_gguf.py",
+      "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct",
+      "--outfile",
+      "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+      "--outtype",
+      "bf16"
+    ],
+    "lineage_note": "Converted directly from the audited BF16 Safetensors checkpoint. BF16 values stored as F32 metadata tensors are exact value-preserving expansions, not a separately trained or quantized source.",
+    "ollama_model": "qwen25-original-bf16",
+    "ollama_modelfile": "/Users/sasha/p-adic-quant/results/qwen25-original-bf16.Modelfile",
+    "ollama_create_command": [
+      "ollama",
+      "create",
+      "qwen25-original-bf16",
+      "--file",
+      "results/qwen25-original-bf16.Modelfile"
+    ],
+    "ollama_show": "  Model\n    architecture        qwen2      \n    parameters          494.03M    \n    context length      32768      \n    embedding length    896        \n    quantization        BF16       \n\n  Capabilities\n    completion    \n    tools         \n\n  System\n    You are Qwen, created by Alibaba Cloud. You are a helpful assistant.    \n\n  License\n    Apache License               \n    Version 2.0, January 2004    \n    ...                          \n\n"
+  },
+  "variants": {
+    "q4_k_m": {
+      "file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+      "size_bytes": 397807520,
+      "sha256": "76c2a33bb7fb27af3d2b3d9a6bedbaea0d56f9dc40fcaedb81f2fe162c2df7be",
+      "tensor_count": 290,
+      "tensor_types": {
+        "F32": 121,
+        "Q4_K": 12,
+        "Q5_0": 132,
+        "Q6_K": 12,
+        "Q8_0": 13
+      },
+      "quantization_requested": "Q4_K_M",
+      "quantize_command": [
+        "/private/tmp/llama.cpp/build/bin/llama-quantize",
+        "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+        "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+        "Q4_K_M",
+        "8"
+      ],
+      "immediate_parent_file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+      "immediate_parent_sha256": "61e4f6761f30aec4fa1af6067c2b7fa15452e68af152edd7ebdb94e619a33d24",
+      "original_source_sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+      "ollama_model": "qwen25-original-q4_k_m",
+      "ollama_modelfile": "/Users/sasha/p-adic-quant/results/qwen25-original-q4_k_m.Modelfile",
+      "ollama_create_command": [
+        "ollama",
+        "create",
+        "qwen25-original-q4_k_m",
+        "--file",
+        "results/qwen25-original-q4_k_m.Modelfile"
+      ],
+      "ollama_show": "  Model\n    architecture        qwen2      \n    parameters          494.03M    \n    context length      32768      \n    embedding length    896        \n    quantization        Q4_K_M     \n\n  Capabilities\n    completion    \n    tools         \n\n  System\n    You are Qwen, created by Alibaba Cloud. You are a helpful assistant.    \n\n  License\n    Apache License               \n    Version 2.0, January 2004    \n    ...                          \n\n"
+    },
+    "q6_k": {
+      "file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-Q6_K.gguf",
+      "size_bytes": 505736096,
+      "sha256": "a25f1db519894e19fc3c3387229b06c712b0843e377c3b2c5049614d37ca6e2f",
+      "tensor_count": 290,
+      "tensor_types": {
+        "F32": 121,
+        "Q6_K": 24,
+        "Q8_0": 145
+      },
+      "quantization_requested": "Q6_K",
+      "quantize_command": [
+        "/private/tmp/llama.cpp/build/bin/llama-quantize",
+        "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+        "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-Q6_K.gguf",
+        "Q6_K",
+        "8"
+      ],
+      "immediate_parent_file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+      "immediate_parent_sha256": "61e4f6761f30aec4fa1af6067c2b7fa15452e68af152edd7ebdb94e619a33d24",
+      "original_source_sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+      "ollama_model": "qwen25-original-q6_k",
+      "ollama_modelfile": "/Users/sasha/p-adic-quant/results/qwen25-original-q6_k.Modelfile",
+      "ollama_create_command": [
+        "ollama",
+        "create",
+        "qwen25-original-q6_k",
+        "--file",
+        "results/qwen25-original-q6_k.Modelfile"
+      ],
+      "ollama_show": "  Model\n    architecture        qwen2      \n    parameters          494.03M    \n    context length      32768      \n    embedding length    896        \n    quantization        Q6_K       \n\n  Capabilities\n    completion    \n    tools         \n\n  System\n    You are Qwen, created by Alibaba Cloud. You are a helpful assistant.    \n\n  License\n    Apache License               \n    Version 2.0, January 2004    \n    ...                          \n\n"
+    },
+    "q8_0": {
+      "file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+      "size_bytes": 531067808,
+      "sha256": "e077f216e562e903f0b3bfd0294e5868b6a6c7d138fd318e8c09fef173d83b5b",
+      "tensor_count": 290,
+      "tensor_types": {
+        "F32": 121,
+        "Q8_0": 169
+      },
+      "quantization_requested": "Q8_0",
+      "quantize_command": [
+        "/private/tmp/llama.cpp/build/bin/llama-quantize",
+        "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+        "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+        "Q8_0",
+        "8"
+      ],
+      "immediate_parent_file": "/Users/sasha/p-adic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-BF16.gguf",
+      "immediate_parent_sha256": "61e4f6761f30aec4fa1af6067c2b7fa15452e68af152edd7ebdb94e619a33d24",
+      "original_source_sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+      "ollama_model": "qwen25-original-q8_0",
+      "ollama_modelfile": "/Users/sasha/p-adic-quant/results/qwen25-original-q8_0.Modelfile",
+      "ollama_create_command": [
+        "ollama",
+        "create",
+        "qwen25-original-q8_0",
+        "--file",
+        "results/qwen25-original-q8_0.Modelfile"
+      ],
+      "ollama_show": "  Model\n    architecture        qwen2      \n    parameters          494.03M    \n    context length      32768      \n    embedding length    896        \n    quantization        Q8_0       \n\n  Capabilities\n    completion    \n    tools         \n\n  System\n    You are Qwen, created by Alibaba Cloud. You are a helpful assistant.    \n\n  License\n    Apache License               \n    Version 2.0, January 2004    \n    ...                          \n\n"
+    }
+  }
+}

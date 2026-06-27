@@ -1,0 +1,37 @@
+{
+  "arguments": {
+    "data_root": "data/datasets/imagenette2-160",
+    "checkpoint": "data/checkpoints/resnet18-f37072fd.pth",
+    "bits": [
+      4,
+      5,
+      6,
+      8
+    ],
+    "batch_size": 64,
+    "workers": 4,
+    "limit": null,
+    "latency_repeats": 30,
+    "quantize_endpoints": false,
+    "output_dir": "results"
+  },
+  "model": "torchvision ResNet18_Weights.DEFAULT",
+  "torch": "2.12.1",
+  "device": "mps",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "quantized_weight_count": 11157504,
+  "exponent_count": 4736,
+  "exponent_selection": "normalized_regret",
+  "optimized_prefix_bits": [
+    4,
+    5,
+    6,
+    8
+  ],
+  "reference_dtype": "float16",
+  "reference_graph": "Conv-BatchNorm fused before FP16 cast",
+  "encoding_source_dtype": "float32",
+  "storage_note": "Estimated packed format; no dyadic file is serialized.",
+  "throughput_note": "Whole-dataset images_per_s includes loader and first-run MPS startup and is not a cross-row speed comparison. Use warmed latency_batch*_ms for the FP16-materialized path.",
+  "dataset_size": 3925
+}

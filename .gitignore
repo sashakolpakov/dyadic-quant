@@ -1,0 +1,21 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local datasets, checkpoints, and downloaded model artifacts.
+data/
+*.gguf
+*.safetensors
+*.pth
+*.pt
+*.bin
+
+# Local runtime logs and temporary files.
+*.log
+*.tmp
+*.bak

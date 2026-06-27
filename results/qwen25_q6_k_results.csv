@@ -1,0 +1,2 @@
+method,bits_per_weight,conversion_ms,materialization_ms,total_model_bytes,incremental_plane_bytes,arc_easy_accuracy,arc_elapsed_s,cross_entropy,perplexity,next_token_agreement,evaluated_tokens,wikitext_elapsed_s,wikitext_tokens_per_s,generated_tokens,generation_elapsed_s,generation_tokens_per_s
+dequantized_gguf_reference,16,0.0,0.0,988065664,0,0.39,10.9140970420558,3.327066292272006,27.8564988844287,0.9453058242797852,8191,2.6083094580098987,3140.348233928351,64,2.2955992079805583,27.87943112086229
