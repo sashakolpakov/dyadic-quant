@@ -64,3 +64,11 @@ Current speed artifacts:
   add, add+ReLU, and MaxPool2d. Current failing subkernels are GEMM,
   output-projection GEMM, embedding, all measured Conv2d shapes, and standalone
   AdaptiveAvgPool2d.
+- `results/level2/metal_gate_results.csv`: Metal GPU gate pass/fail for
+  outproj, GEMM, embedding, and global pool. Outproj passes (6.15ms vs 10.84ms
+  gate); GEMM (1.01ms vs 0.19ms), embedding (0.64ms vs 0.04ms), and pool
+  (0.047ms vs 0.003ms) fail.
+- `results/level2/metal_shmoo_tk16.csv`, `tk32.csv`, `tk64.csv`: Metal kernel
+  tile-size shmoo. TK=16 is best; TK=32 and TK=64 are 1.2× and 1.5× slower.
+- `results/level2/metal_shmoo_padded_bank_conflict.csv`: bank-conflict
+  mitigation test (padding to 17) — no measurable improvement vs unpadded.

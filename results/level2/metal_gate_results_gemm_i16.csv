@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,metal_ms,speedup_vs_gate,best_threads,passes_fixed_gate,correct,op_tree
+linear_gemm_qwen_seq,0.192396,0.633596,0.303657,0,false,true,"metal_gemm_tiled_i16"

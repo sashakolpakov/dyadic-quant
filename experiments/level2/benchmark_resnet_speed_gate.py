@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.dyadic_torch import encode_model, materialize_prefix, storage_bytes
+from dyadic_quant.level1 import encode_model, materialize_prefix, storage_bytes
 from dyadic_quant.level2 import build_level2_model, build_native_cpu, warm_native_cpu_workers
-from experiments.run_resnet18_dyadic import (
+from experiments.level1.run_resnet18_dyadic import (
     fuse_resnet_batch_norm,
     replace_resnet_basic_blocks_with_native_residuals,
 )

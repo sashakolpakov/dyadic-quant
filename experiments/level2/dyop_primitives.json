@@ -69,7 +69,7 @@
       "role": "Single-row dyadic dot primitive for GEMV and small tails.",
       "inputs": ["activation[K]:float32", "signed_odd[K]:int16"],
       "outputs": ["accumulator:float32"],
-      "required_for": ["linear_gemv", "embedding tails", "fallback tails inside native kernels"],
+      "required_for": ["linear_gemv", "embedding tails", "scalar tails inside native kernels"],
       "architecture_notes": {
         "arm64_neon": "Use vector int16 load, sign-extend, convert to float, FMLA, horizontal add.",
         "all": "Only valid as a performance primitive when subkernel gate beats materialized row-dot."

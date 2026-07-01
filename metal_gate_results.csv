@@ -1,0 +1,10 @@
+subkernel,materialized_gate_ms,metal_ms,speedup_vs_gate,best_threads,passes_fixed_gate,correct,op_tree
+linear_gemm_qwen_seq,0.192396,1.013954,0.189748,0,false,true,"metal_gemm_tiled_dbuf"
+linear_output_projection,10.843443,6.154000,1.762015,0,true,true,"metal_gemm_tiled_dbuf"
+embedding_qwen_vocab_width,0.015501,0.264014,0.058713,0,false,true,"metal_embedding_1thread_per_index"
+resnet_conv3x3,3.935540,12.245833,0.321378,0,false,true,"metal_conv_1thread_per_output"
+resnet_layer2_stride2_3x3,0.347237,0.965983,0.359465,0,false,true,"metal_conv_1thread_per_output"
+resnet_layer3_stride2_3x3,0.262369,1.078683,0.243231,0,false,true,"metal_conv_1thread_per_output"
+resnet_layer4_stride2_3x3,0.228865,1.244696,0.183872,0,false,true,"metal_conv_1thread_per_output"
+resnet_downsample,0.265602,1.634962,0.162451,0,false,true,"metal_conv_1thread_per_output"
+adaptive_avgpool2d_resnet_global,0.013332,0.196520,0.067840,0,false,true,"metal_pool49_1thread_per_row"

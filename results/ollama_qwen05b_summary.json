@@ -1,9 +1,0 @@
-{
-  "model": "qwen2.5:0.5b",
-  "questions": 100,
-  "arc_easy_generation_accuracy": 0.62,
-  "valid_letter_rate": 0.94,
-  "prompt_tokens_per_s": 4515.871144831,
-  "generation_tokens_per_s": 396.8645237310144,
-  "wall_elapsed_s": 8.16181212500669
-}

@@ -13,13 +13,14 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.dyadic_torch import encode_tensor_per_output_channel
+from dyadic_quant.level1 import encode_tensor_per_output_channel
 from dyadic_quant.level2.native import (
     build_native_cpu,
     dyadic_conv2d_packed_native_cpu,
     dyadic_embedding_packed_native_cpu,
     dyadic_linear_packed_native_cpu,
     pack_native_cpu_weight,
+    warm_native_cpu_workers,
 )
 
 
@@ -45,7 +46,14 @@ def time_call(fn, *, warmup: int, repeats: int) -> tuple[torch.Tensor, float]:
     return output, elapsed_ms
 
 
-def benchmark_linear(bits: int, repeats: int) -> list[dict[str, object]]:
+def benchmark_linear(
+    bits: int,
+    repeats: int,
+    *,
+    torch_threads: int,
+    dyop_threads: int,
+    shapes_filter: set[str] | None = None,
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     shapes = [
         ("gemv_qwen_mlp", 1, 896, 4864),
@@ -54,20 +62,32 @@ def benchmark_linear(bits: int, repeats: int) -> list[dict[str, object]]:
         ("output_projection", 8, 896, 151936),
     ]
     for name, rows_in, input_width, output_width in shapes:
+        if shapes_filter is not None and name not in shapes_filter:
+            continue
         generator = torch.Generator().manual_seed(100 + rows_in + output_width)
         inputs = torch.randn(rows_in, input_width, generator=generator)
         weight = torch.randn(output_width, input_width, generator=generator)
         bias = torch.randn(output_width, generator=generator)
         encoded = encode_tensor_per_output_channel(weight, max_bits=8)
         decoded = encoded.decode(bits)
-        packed = pack_native_cpu_weight(encoded, bits=bits)
+        packed = pack_native_cpu_weight(
+            encoded.signs,
+            encoded.magnitude_code,
+            encoded.exponents,
+            encoded.max_bits,
+            encoded.group_size,
+            bits,
+        )
+        torch.set_num_threads(torch_threads)
         expected, torch_ms = time_call(
             lambda: F.linear(inputs, decoded, bias),
             warmup=2,
             repeats=repeats,
         )
+        torch.set_num_threads(dyop_threads)
+        warm_native_cpu_workers()
         actual, dyop_ms = time_call(
-            lambda: dyadic_linear_packed_native_cpu(inputs, packed, bias=bias),
+            lambda: dyadic_linear_packed_native_cpu(inputs, packed, bias),
             warmup=2,
             repeats=repeats,
         )
@@ -85,19 +105,28 @@ def benchmark_linear(bits: int, repeats: int) -> list[dict[str, object]]:
     return rows
 
 
-def benchmark_embedding(bits: int, repeats: int) -> dict[str, object]:
+def benchmark_embedding(bits: int, repeats: int, *, torch_threads: int, dyop_threads: int) -> dict[str, object]:
     generator = torch.Generator().manual_seed(200)
     vocab, width = 151936, 896
     indices = torch.randint(0, vocab, (4, 64), generator=generator)
     weight = torch.randn(vocab, width, generator=generator)
     encoded = encode_tensor_per_output_channel(weight, max_bits=8)
     decoded = encoded.decode(bits)
-    packed = pack_native_cpu_weight(encoded, bits=bits)
+    packed = pack_native_cpu_weight(
+        encoded.signs,
+        encoded.magnitude_code,
+        encoded.exponents,
+        encoded.max_bits,
+        encoded.group_size,
+        bits,
+    )
+    torch.set_num_threads(torch_threads)
     expected, torch_ms = time_call(
         lambda: F.embedding(indices, decoded),
         warmup=2,
         repeats=repeats,
     )
+    torch.set_num_threads(dyop_threads)
     actual, dyop_ms = time_call(
         lambda: dyadic_embedding_packed_native_cpu(indices, packed),
         warmup=2,
@@ -114,7 +143,7 @@ def benchmark_embedding(bits: int, repeats: int) -> dict[str, object]:
     }
 
 
-def benchmark_conv2d(bits: int, repeats: int) -> list[dict[str, object]]:
+def benchmark_conv2d(bits: int, repeats: int, *, torch_threads: int, dyop_threads: int) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     shapes = [
         ("resnet_conv3x3", (8, 64, 56, 56), (64, 64, 3, 3), 1, 1),
@@ -127,19 +156,30 @@ def benchmark_conv2d(bits: int, repeats: int) -> list[dict[str, object]]:
         bias = torch.randn(weight_shape[0], generator=generator)
         encoded = encode_tensor_per_output_channel(weight, max_bits=8)
         decoded = encoded.decode(bits)
-        packed = pack_native_cpu_weight(encoded, bits=bits)
+        packed = pack_native_cpu_weight(
+            encoded.signs,
+            encoded.magnitude_code,
+            encoded.exponents,
+            encoded.max_bits,
+            encoded.group_size,
+            bits,
+        )
+        torch.set_num_threads(torch_threads)
         expected, torch_ms = time_call(
             lambda: F.conv2d(inputs, decoded, bias=bias, stride=stride, padding=padding),
             warmup=1,
             repeats=repeats,
         )
+        torch.set_num_threads(dyop_threads)
         actual, dyop_ms = time_call(
             lambda: dyadic_conv2d_packed_native_cpu(
                 inputs,
                 packed,
-                bias=bias,
-                stride=stride,
-                padding=padding,
+                bias,
+                stride,
+                padding,
+                weight_shape[2],
+                weight_shape[3],
             ),
             warmup=1,
             repeats=repeats,
@@ -163,6 +203,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bits", type=int, default=4)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--torch-threads", type=int, default=1)
+    parser.add_argument("--dyop-threads", type=int, default=None)
+    parser.add_argument(
+        "--ops",
+        nargs="+",
+        choices=("linear", "embedding", "conv2d"),
+        default=["linear", "embedding", "conv2d"],
+    )
+    parser.add_argument(
+        "--linear-shapes",
+        nargs="+",
+        choices=(
+            "gemv_qwen_mlp",
+            "gemm_qwen_seq",
+            "output_projection_gemv",
+            "output_projection",
+        ),
+        help="Restrict --ops linear to selected benchmark shapes.",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -174,11 +232,36 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     build_native_cpu()
-    torch.set_num_threads(args.torch_threads)
+    dyop_threads = args.dyop_threads or args.torch_threads
     rows: list[dict[str, object]] = []
-    rows.extend(benchmark_linear(args.bits, args.repeats))
-    rows.append(benchmark_embedding(args.bits, args.repeats))
-    rows.extend(benchmark_conv2d(args.bits, args.repeats))
+    if "linear" in args.ops:
+        rows.extend(
+            benchmark_linear(
+                args.bits,
+                args.repeats,
+                torch_threads=args.torch_threads,
+                dyop_threads=dyop_threads,
+                shapes_filter=set(args.linear_shapes) if args.linear_shapes else None,
+            )
+        )
+    if "embedding" in args.ops:
+        rows.append(
+            benchmark_embedding(
+                args.bits,
+                args.repeats,
+                torch_threads=args.torch_threads,
+                dyop_threads=dyop_threads,
+            )
+        )
+    if "conv2d" in args.ops:
+        rows.extend(
+            benchmark_conv2d(
+                args.bits,
+                args.repeats,
+                torch_threads=args.torch_threads,
+                dyop_threads=dyop_threads,
+            )
+        )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="") as handle:

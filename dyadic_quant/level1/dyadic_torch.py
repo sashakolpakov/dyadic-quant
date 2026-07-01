@@ -129,10 +129,7 @@ def load_encoded_model(path: Path) -> EncodedModel:
         sign_bit = torch.bitwise_right_shift(packed, sign_shift)
         signs = torch.where(sign_bit > 0, -1, 1).to(torch.int8)
         magnitude_code = torch.bitwise_and(packed, magnitude_mask).to(torch.int32)
-        if "group_size" in raw:
-            group_size = int(raw["group_size"])
-        else:
-            group_size = math.prod(shape[1:])
+        group_size = int(raw["group_size"])
         exponents = raw["exponents"].to(torch.int16)
         if exponents.ndim == 1:
             exponents = exponents.unsqueeze(1)

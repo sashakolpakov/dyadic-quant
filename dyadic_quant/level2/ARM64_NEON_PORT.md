@@ -40,6 +40,50 @@ After K:
 - Embedding keeps a row-major packed-code view and decodes selected rows directly.
 - Global average pool uses a shape-specialized 49-value reduction and persistent workers; no generic dispatch or allocation.
 
+## M5-specific findings
+
+### SVE2 unavailable
+
+`hw.optional.arm.FEAT_SVE=0` on this M5 generation. The SVE2 port
+(`dyop_primitives_sve2.cpp`) hangs the process if executed. SVE2 code is kept
+for future hardware but must not be compiled in by default.
+
+### Gate results
+
+Gate CSVs: `fixed_arm64_neon_gates.csv` (ARM) and `fixed_metal_gates.csv`
+(Metal). Current pass/fail on M5:
+
+| Subkernel | Gate (ms) | NEON (ms) | Metal (ms) | Pass? |
+|---|---|---|---|---|
+| outproj (8×151k×896) | 10.84 | 0.34 | 6.15 | ✓ both |
+| embedding (8×896×136M) | 0.04 | 0.34 | 0.64 | ✗ both |
+| global pool (8×896×49) | 0.003 | 0.010 | 0.047 | ✗ both |
+| GEMM (64×896×896) | 0.19 | 0.33 | 1.01 | ✗ both |
+
+Only outproj passes on either backend.
+
+### Bottleneck analysis
+
+- NEON GEMM is 1.7× above gate (0.33 ms vs 0.19 ms). At 224 GFLOPS theoretical
+  peak (4-wide FMLA × 3.88 GHz), the 536 MFLOP output cannot be computed in
+  0.19 ms on a single core. Multi-core dispatch (4 P-cores) may narrow the gap
+  but the remaining factor-of-2 difference suggests packing overhead and
+  int16→float conversion dominate.
+
+- Metal GEMM is 5.3× above the gate. Threadgroup-memory tiling (TK=16) with
+  double-buffering reached 1.01 ms; TK=32 and TK=64 were slower. Bank conflicts
+  were confirmed via occupancy analysis but padding to 17 did not help. ALU
+  utilization is 30–40%.
+
+- Tiny workloads (embedding, pool) are dominated by GPU dispatch overhead.
+  Metal launch latency exceeds the sub-0.1 ms gates.
+
+### Recommended strategy
+
+A hybrid dispatch routes tiny workloads through NEON CPU and large matmuls
+through Metal GPU. GEMM throughput on both backends is still below the 0.19 ms
+gate, so this is a direction, not a resolution.
+
 ## Gate policy
 
 Do not admit a primitive/tree into a layer kernel merely because it is correct. It must first beat the corresponding fixed row in `fixed_arm64_neon_gates.csv`, with packing excluded and without materializing decoded weights.

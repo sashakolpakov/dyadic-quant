@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.textgen import exact_match
-from experiments.compare_generations import (
+from dyadic_quant.level1.textgen import exact_match
+from experiments.level1.compare_generations import (
     chunk_items,
     judge_prompt,
     normalize_judge_verdicts,

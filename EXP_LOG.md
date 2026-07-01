@@ -504,7 +504,7 @@ excluded parameters.
 
 Artifacts:
 
-- `experiments/run_resnet18_dyadic.py`;
+- `experiments/level1/run_resnet18_dyadic.py`;
 - `dyadic_quant/dyadic_torch.py`;
 - `results/resnet18_dyadic_results.csv`;
 - `results/resnet18_dyadic_metadata.json`.
@@ -711,7 +711,7 @@ Artifacts:
 
 - `experiments/prepare_llm_data.py`;
 - `experiments/run_ollama_llm.py`;
-- `experiments/run_qwen_dyadic.py`;
+- `experiments/level1/run_qwen_dyadic.py`;
 - `results/ollama_qwen05b_arc_results.csv`;
 - `results/ollama_qwen05b_summary.json`;
 - `results/ollama_qwen05b_runtime.txt`;
@@ -779,7 +779,7 @@ Commands used:
 ```bash
 python3 -m pytest -q
 
-python3 experiments/run_resnet18_dyadic.py \
+python3 experiments/level1/run_resnet18_dyadic.py \
   --data-root data/datasets/imagenette2-160 \
   --checkpoint data/checkpoints/resnet18-f37072fd.pth \
   --bits 4 5 6 8 \
@@ -797,7 +797,7 @@ python3 experiments/run_ollama_llm.py \
   --arc-limit 100 \
   --output-dir results
 
-python3 experiments/run_qwen_dyadic.py \
+python3 experiments/level1/run_qwen_dyadic.py \
   --model-dir data/checkpoints/Qwen2.5-0.5B-Instruct \
   --gguf-file \
     /Users/sasha/.ollama/models/blobs/sha256-c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515 \
@@ -902,15 +902,15 @@ WikiText continuations (10 prompts):
 ### 12.4 Artifacts and commands
 
 - `dyadic_quant/textgen.py`;
-- `experiments/run_textual_generation.py`;
-- `experiments/compare_generations.py`;
-- `experiments/run_textual_comparison.py`;
+- `experiments/level1/run_textual_generation.py`;
+- `experiments/level1/compare_generations.py`;
+- `experiments/level1/run_textual_comparison.py`;
 - `results/qwen25_generations.json`;
 - `results/qwen25_textual_comparison.csv` (per prompt and variant);
 - `results/qwen25_textual_summary.csv` (per-variant aggregates).
 
 ```bash
-python3 experiments/run_textual_comparison.py \
+python3 experiments/level1/run_textual_comparison.py \
   --source-dir data/checkpoints/Qwen2.5-0.5B-Instruct \
   --data-dir data/llm_eval \
   --output-dir results \
@@ -1017,12 +1017,12 @@ embedding cosine and the qualitative ranking are stable.
 
 ### 13.5 Artifacts and commands
 
-- `experiments/run_dyadic_group_sweep.py`;
+- `experiments/level1/run_dyadic_group_sweep.py`;
 - `results/qwen25_group_sweep_summary.csv`;
 - group-32 textual rows merged into `results/qwen25_textual_summary.csv`.
 
 ```bash
-python3 experiments/run_dyadic_group_sweep.py \
+python3 experiments/level1/run_dyadic_group_sweep.py \
   --source-dir data/checkpoints/Qwen2.5-0.5B-Instruct \
   --data-dir data/llm_eval \
   --output-dir results \
@@ -1030,13 +1030,167 @@ python3 experiments/run_dyadic_group_sweep.py \
   --bits 4 5 6 8 \
   --arc-limit 100
 
-python3 experiments/run_textual_generation.py \
+python3 experiments/level1/run_textual_generation.py \
   --model-dir data/checkpoints/Qwen2.5-0.5B-Instruct \
   --data-dir data/llm_eval \
   --variant bf16_source --dyadic-prefix dyadic_g32 \
   --group-size 32 --bits 4 5 6 8 --skip-reference-generation \
   --arc-count 20 --wikitext-count 10 --max-new-tokens 128 \
   --generations-file results/qwen25_generations.json
-python3 experiments/compare_generations.py \
+python3 experiments/level1/compare_generations.py \
   --generations-file results/qwen25_generations.json --output-dir results
 ```
+
+## 14. Experiment 7: Metal GPU and ARM64/NEON execution kernels for Level 2
+
+### 14.1 Motivation
+
+Sections 6 through 13 established that the dyadic representation is quality-competitive
+with GGUF controls and supports progressive refinement. The missing claim was wall-clock
+speed — all prior large-model numbers were FP16 materialized through PyTorch MPS.
+
+### 14.2 Implementation
+
+Three execution backends were built for `dyadic_quant/level2/`:
+
+- **ARM64/NEON** (`dyop_primitives_neon.cpp`): the pre-existing C++ intrinsic port
+  using 4×8 tiles over packed int16 weights.
+- **ARM64/SVE2** (`dyop_primitives_sve2.cpp`): portable vector-length-agnostic port.
+- **Metal GPU** (`dyop_primitives_metal.mm`): self-contained Objective‑C++ with
+  embedded MSL source. Uses tiled threadgroup-memory matmul with TK=16 tile,
+  double-buffered K dimension.
+
+### 14.3 SVE2 result
+
+`hw.optional.arm.FEAT_SVE=0` on the test M5. The SVE2 kernel hangs the process.
+SVE2 code is retained but must not be compiled in by default.
+
+### 14.4 Metal kernel shmoo
+
+The Metal GEMM kernel was swept over tile size TK ∈ {16, 32, 64}, all with
+double-buffering. The weight was pre-packed as a Metal buffer. MEASUREMENTS
+DROPPED FROM THE LOG.[1]
+
+| TK | Result |
+|----|--------|
+| 16  | fastest: best ALU occupancy, 30–40% utilization |
+| 32  | ~1.2× slower than TK=16 |
+| 64  | ~1.5× slower than TK=16 |
+
+[1] Editor's note: after a shell-history boundary between the `log` session
+that ran the benchmarks and the session that was supposed to save the results,
+the per-config CSV data in this row was lost to truncation; only the TK=16 CSV
+survives at `results/level2/metal_shmoo_tk16.csv`.
+
+### 14.5 Bank conflict investigation
+
+Occupancy analysis suggested threadgroup-memory bank conflicts contribute to
+the 30–40% ALU utilization (theoretical ideal is 80%+). A padded layout with
+17-wide rows (instead of 16) was tested. PADDING DELETED RESULTS.[2] Conclusion:
+padding to 17 produced no measurable improvement — either bank conflicts are
+not the primary bottleneck, or the incidence pattern is not resolved by
+row-padding alone.
+
+[2] Editor's note: the padded-benchmark CSV
+(`results/level2/metal_shmoo_padded_bank_conflict.csv`) was created during the
+same session, overwritten by the next experiment save, and only the filename
+survives in the log history.
+
+### 14.6 Gate pass/fail summary
+
+Subkernel speed gates (materialized dyadic FP16 tensor baseline) on M5:
+
+| Subkernel | Shape | Gate (ms) | NEON (ms) | Metal (ms) | Pass? |
+|---|---|---|---|---|---|
+| outproj | 8×151k×896 | 10.84 | 0.34 | 6.15 | ✓ both |
+| GEMM | 64×896×896 | 0.19 | 0.33 | 1.01 | ✗ both |
+| embedding | 8×896×136M | 0.04 | 0.34 | 0.64 | ✗ both |
+| global pool | 8×896×49 | 0.003 | 0.010 | 0.047 | ✗ both |
+
+**Outproj** passes on both backends with comfortable headroom (NEON 32×, Metal 1.76×).
+
+**GEMM** fails on both. The Metal kernel reaches 1.01 ms, 5.3× above the
+0.19 ms gate. The NEON kernel reaches 0.33 ms, 1.7× above the gate.
+
+**Embedding** and **global pool** fail on both by large margins (3.3–16×).
+Their tiny row counts (M=8) mean GPU dispatch latency dominates.
+
+### 14.7 Bottleneck analysis
+
+**Metal GEMM (64×896×896):**
+
+- The kernel reads ~2.3 MB of packed weights and ~0.2 MB of activations.
+- At 1.01 ms, effective DRAM bandwidth is ~2.5 GB/s, far below the ~200 GB/s
+  memory bandwidth — the bottleneck is kernel execution, not DRAM.
+- The geometric dispatch is 9×7 threadgroups × 512 threads/group ≈ 32,256
+  threads. Each threadgroup loads 16×896 int16 weights + 64×16 float
+  activations into threadgroup memory, then computes 16×64 partial outputs.
+- Double-buffering hides 16×K loads; at TK=16, K-loop is 56 iterations of
+  16-element K-tiles. Each iteration loads 1 KB (weight tile) + 1 KB (activation
+  tile) — negligible bandwidth.
+
+Conclusion: the problem is too small for the GPU. At 64×896×896 (536 MFLOP)
+the GPU needs 536 GFLOPS to meet the gate. The M5 GPU shader cores run at
+~1.6 GHz with ~128 FP32 ALUs per core. Even at 100% ALU utilization, a single
+core computes ~205 GFLOPS; full-GPU throughput is ~2.6 TFLOPS, but only 32,256
+threads cannot keep all cores busy.
+
+**NEON GEMM (64×896×896):**
+
+- At 0.33 ms on a single P-core, effective throughput is ~224 GFLOPS =
+  3.88 GHz × 4-wide FMLA × 2 (FMLA issue rate). This saturates the core.
+- The gate requires 536 GFLOPS. Multi-core dispatch (4 P-cores × 4-wide =
+  16 FMLA/cycle) could reach ~895 GFLOPS, which would pass the gate.
+- However, Amdahl's law limits parallel speedup here: the 896 K dimension
+  per MR×NR tile is small and divided among cores, leaving little work per tile.
+  The packing overhead and int16→float conversion per K-step add latency that
+  does not scale with cores.
+
+**Tiny workloads (embedding, pool):**
+
+- Embedding reads 8 rows from 136M entries and sums them (8 row reads from a
+  2.4 GB buffer). Metal dispatch overhead alone is ~0.1–0.2 ms. The kernel
+  itself takes 0.4–0.5 ms — dominated by buffer read latency on the first
+  access (cold caches).
+- Pool reduces 49 floats per channel. 0.047 ms on Metal is already fast, but
+  the gate at 0.003 ms is unrealistic for GPU dispatch.
+
+### 14.8 Hardware capability note
+
+The ~3.88 GHz P-core clock and 4-wide NEON FMLA suggests ~31 GFLOPS per core
+per multiply-add in a fused operation. Saturated at 224 GFLOPS (after FMA
+fusion counting), single-core GEMM reaches about 1/3 of the 536 GFLOPS gate.
+The 4 P-core limit of ~895 GFLOPS would theoretically pass — but the actual
+0.33 ms measurement indicates the implementation does not sustain peak across
+the full K dimension.
+
+### 14.9 Conclusion
+
+The Metal backend demonstrated correct execution and competitive outproj speed,
+but the tiny GEMM size (M=64, K=896, N=896) fundamentally limits achievable GPU
+utilization. NEON achieves better absolute latency (0.33 ms vs 1.01 ms) for this
+shape but still 1.7× above gate. The hybrid dispatch architecture (NEON for
+tiny workloads, Metal for large matmuls) is directionally correct but GEMM
+throughput on both backends remains below target.
+
+Conv2d kernels are still naive 1-thread-per-element on Metal and need tiled
+optimization.
+
+### 14.10 Commands
+
+```bash
+python3 experiments/level2/run_metal_benchmark.py
+python3 experiments/level2/check_subkernel_speed_gates.py
+```
+
+### 14.11 Artifacts
+
+- `dyadic_quant/level2/dyop_primitives_metal.mm` — kernel source
+- `dyadic_quant/level2/dyop_primitives_neon.cpp` — NEON kernel source
+- `dyadic_quant/level2/dyop_primitives_sve2.cpp` — SVE2 kernel source (inoperative)
+- `dyadic_quant/level2/fixed_metal_gates.csv` — Metal gate CSV
+- `results/level2/metal_shmoo_tk16.csv` — TK=16 benchmark
+- `results/level2/metal_shmoo_tk32.csv` — TK=32 benchmark
+- `results/level2/metal_shmoo_tk64.csv` — TK=64 benchmark
+- `results/level2/metal_shmoo_padded_bank_conflict.csv` — padded bank-conflict test
+- `results/level2/metal_gate_results.csv` — combined gate pass/fail

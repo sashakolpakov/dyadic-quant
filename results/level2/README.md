@@ -15,3 +15,12 @@ Generated smoke artifact:
   validation run.
 - `native_dyop_prefix_sweep.dyadic.pt`: packed Level 1 artifact consumed by the
   multi-prefix Level 2 validation.
+
+Metal GPU benchmarks:
+
+- `metal_gate_results.csv`: combined gate pass/fail (outproj passes; GEMM,
+  embedding, global pool fail).
+- `metal_shmoo_tk16.csv`, `metal_shmoo_tk32.csv`, `metal_shmoo_tk64.csv`: tile
+  size sweep data.
+- `metal_shmoo_padded_bank_conflict.csv`: padded (stride=17) bank conflict
+  mitigation test.

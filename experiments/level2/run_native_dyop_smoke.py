@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.dyadic_torch import (
+from dyadic_quant.level1 import (
     encode_model,
     load_encoded_model,
     materialize_prefix,

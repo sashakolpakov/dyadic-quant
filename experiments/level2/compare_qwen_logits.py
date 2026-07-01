@@ -13,8 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.dyadic_torch import load_encoded_model, materialize_prefix
+from dyadic_quant.level1 import load_encoded_model, materialize_prefix
 from dyadic_quant.level2 import build_level2_model, build_native_cpu
+from experiments.level2.common import require_speed_gates
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,6 +37,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("results/level2/qwen_logit_equivalence.json"),
     )
+    parser.add_argument(
+        "--speed-gates",
+        type=Path,
+        default=Path("results/level2/subkernel_speed_gates_arm64_neon_latest.csv"),
+        help="CSV proving required Qwen native dyop kernels beat materialized gates.",
+    )
     return parser.parse_args()
 
 
@@ -56,6 +63,7 @@ def flatten_output(output):
 
 def main() -> None:
     args = parse_args()
+    require_speed_gates(args.speed_gates, "qwen")
     build_native_cpu()
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir, local_files_only=True)
     tokenizer.pad_token = tokenizer.eos_token

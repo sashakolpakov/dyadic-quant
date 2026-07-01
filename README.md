@@ -1,48 +1,21 @@
 # Progressive dyadic quantization experiments
 
-This repository contains experiments on low-bit neural-network representations
-with two related threads:
+This repository contains progressive dyadic quantization experiments split into
+two separate code areas:
 
-1. finite-ring / residue arithmetic for small quantized MLPs;
-2. progressive dyadic quantization, where one signed MSB-first bit-plane code
-   can be executed at multiple prefix widths and refined by adding exactly one
-   bit per encoded weight.
-
-The small-network benchmark trains two float MLPs:
-
-- noisy two-moons: `2 -> 16 -> 16 -> 2`
-- handwritten digits: `64 -> 32 -> 10`
-
-It then performs post-training symmetric quantization with 4-bit and 8-bit
-weights/activations and compares:
-
-1. ordinary integer inference with a wide, non-wrapping accumulator;
-2. linear layers over `Z / p^N Z` for `p = 2, 3, 5`;
-3. two-lane residue-number arithmetic, reconstructed by CRT.
-
-ReLU is applied after taking the centered signed representative, so the modular
-models are hybrid finite-ring networks with a lookup/comparison nonlinearity.
-The modular matrix multiplication itself is exact in the stated ring.
+1. Level 1 representation and quality: encode weights once as signed MSB-first
+   dyadic bit planes, materialize prefixes, and measure quality/storage.
+2. Level 2 native dyop execution: run packed dyadic primitives through native
+   kernel/module surfaces and compare them against Level 1 materialized
+   baselines.
 
 ## Run
 
 ```bash
 python3 -m pip install -r requirements.txt
-python3 experiments/run_small_networks.py
+pytest tests/level1
+pytest tests/level2
 ```
-
-Results are written to `results/small_network_results.csv`, including:
-
-- accuracy and accuracy loss from float;
-- agreement with float predictions and mean absolute logit error;
-- exact modular-wrap count and rate;
-- maximum exact accumulator magnitude;
-- MAC count and measured NumPy runtime;
-- weight/bias storage, modulus entropy, and physical RNS lane width;
-- clipping rates.
-
-See [`RESULTS.md`](RESULTS.md) for the measured three-seed results and practical
-conclusions.
 
 See [`EXP_LOG.md`](EXP_LOG.md) for the complete research log, including the
 Monna-map/signed-digit analysis, controlled GGUF comparisons, and block-wise
@@ -52,26 +25,30 @@ See [`PAPER.md`](PAPER.md) for a self-contained short paper presenting the
 progressive dyadic method, large-model experiments, conclusions, and
 limitations.
 
-For a quick smoke test:
+Level 1 repros:
 
 ```bash
-python3 experiments/run_small_networks.py \
-  --datasets moons --operand-bits 4 --accumulator-bits 8 12 \
-  --epochs 10 --timing-repeats 2
+python3 experiments/level1/run_resnet18_dyadic.py --help
+python3 experiments/level1/run_qwen_dyadic.py --help
+python3 experiments/level1/run_dyadic_group_sweep.py --help
+python3 experiments/level1/run_textual_comparison.py --help
 ```
 
-Run the progressive-prefix experiment:
+Level 2 repros:
 
 ```bash
-python3 experiments/run_progressive_planes.py
+python3 experiments/level2/run_native_dyop_smoke.py --help
+python3 experiments/level2/run_native_dyop_prefix_sweep.py --help
+python3 experiments/level2/benchmark_native_kernels.py --help
 ```
 
-Large-model experiments require MPS and locally downloaded model/data artifacts:
+Control and orchestration scripts live at `experiments/`. Large-model runs
+require locally downloaded model/data artifacts; Level 1 MPS runs require MPS,
+while Level 2 native CPU runs force CPU float32 execution.
 
 ```bash
-python3 experiments/run_resnet18_dyadic.py --help
-python3 experiments/run_qwen_dyadic.py --help
 python3 experiments/run_ollama_llm.py --help
+python3 experiments/run_qwen_textual_global_rerun.py --help
 ```
 
 Measured Apple M5 results are recorded in [`EXP_LOG.md`](EXP_LOG.md):
@@ -97,13 +74,16 @@ packed-kernel speed claim.
 
 ## Repository contents
 
-- `dyadic_quant/`: reusable arithmetic, inference, dyadic encoding, and text
-  generation helpers.
-- `experiments/`: experiment drivers for small MLPs, ResNet-18, Qwen2.5,
-  controlled GGUF baselines, block-size sweeps, and textual comparison.
-- `tests/`: unit tests for arithmetic, inference, progressive nesting,
-  block-wise dyadic encoding, and text-generation metrics.
-- `results/`: small generated CSV/JSON summaries used by the writeups.
+- `dyadic_quant/level1/`: reusable dyadic representation, packed artifact,
+  materialization, and text-generation metric helpers.
+- `dyadic_quant/level2/`: native dyop execution wrappers, module replacement,
+  backend sources, and primitive catalogs.
+- `experiments/level1/`: materialized Level 1 repros and text-comparison tools.
+- `experiments/level2/`: native dyop smoke tests, kernel gates, and Level 1/Level 2 comparisons.
+- `tests/level1/`: representation, artifact, storage, and text-metric tests.
+- `tests/level2/`: scalar/native dyop kernel, module replacement, native CPU,
+  and experiment-wiring tests.
+- `results/`: Level 1 summaries, plus `results/level2/` for native dyop outputs.
 
 Large model checkpoints, GGUF files, downloaded datasets, and packed dyadic
 artifacts are intentionally ignored by git. Recreate or download them locally

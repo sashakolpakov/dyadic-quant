@@ -1,6 +1,6 @@
 """Generate Qwen textual outputs through Level 2 native dyop modules.
 
-This is the Level 2 counterpart to ``experiments/run_textual_generation.py``.
+This is the Level 2 counterpart to ``experiments/level1/run_textual_generation.py``.
 It keeps the textual artifact separate from Level 1 materialized generations:
 the source model may be generated once for comparison, while dyadic variants
 are built with ``build_level2_model`` from packed sign/magnitude tensors.
@@ -20,15 +20,16 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.dyadic_torch import encode_model, load_encoded_model, save_encoded_model
+from dyadic_quant.level1 import encode_model, load_encoded_model, save_encoded_model
 from dyadic_quant.level2 import build_level2_model, build_native_cpu
-from dyadic_quant.textgen import (
+from dyadic_quant.level1.textgen import (
     build_arc_prompts,
     build_wikitext_prompts,
     generate_texts,
     merge_generations,
 )
-from experiments.run_qwen_dyadic import load_wikitext_tokens
+from experiments.level1.run_qwen_dyadic import load_wikitext_tokens
+from experiments.level2.common import require_speed_gates
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,6 +76,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("results/level2/qwen25_dyop_generations.json"),
     )
+    parser.add_argument(
+        "--speed-gates",
+        type=Path,
+        default=Path("results/level2/subkernel_speed_gates_arm64_neon_latest.csv"),
+        help="CSV proving required Qwen native dyop kernels beat materialized gates.",
+    )
     return parser.parse_args()
 
 
@@ -100,6 +107,7 @@ def generate_all(
 
 def main() -> None:
     args = parse_args()
+    require_speed_gates(args.speed_gates, "qwen")
     if args.linear_backend == "native-cpu" or args.embedding_backend == "native-cpu":
         build_native_cpu()
 

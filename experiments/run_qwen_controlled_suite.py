@@ -75,7 +75,7 @@ def main() -> None:
     run(
         [
             python,
-            str(root / "experiments/run_qwen_dyadic.py"),
+            str(root / "experiments/level1/run_qwen_dyadic.py"),
             *common,
             "--bits",
             "4",
@@ -114,7 +114,7 @@ def main() -> None:
         run(
             [
                 python,
-                str(root / "experiments/run_qwen_dyadic.py"),
+                str(root / "experiments/level1/run_qwen_dyadic.py"),
                 *common,
                 "--gguf-file",
                 variant["file"],

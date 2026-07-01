@@ -160,7 +160,7 @@ def main() -> None:
 
     level1_command = [
         python,
-        str(root / "experiments/run_textual_comparison.py"),
+        str(root / "experiments/level1/run_textual_comparison.py"),
         "--source-dir",
         str(args.source_dir.resolve()),
         "--data-dir",
@@ -258,7 +258,7 @@ def main() -> None:
     run(
         [
             python,
-            str(root / "experiments/compare_generations.py"),
+            str(root / "experiments/level1/compare_generations.py"),
             "--generations-file",
             str(level2_generations),
             "--source-variant",

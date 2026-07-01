@@ -4,7 +4,7 @@
   "target": {
     "cpu": "arm64_neon",
     "threading": "persistent pthread worker pool",
-    "no_fallback_rule": "Level 2 native paths must execute native dyop kernels or fail closed; no Torch CPU fallback belongs in a native dyop op-tree."
+    "fail_closed_rule": "Level 2 native paths must execute native dyop kernels or fail closed; no Torch CPU reroute belongs in a native dyop op-tree."
   },
   "research_basis": [
     {

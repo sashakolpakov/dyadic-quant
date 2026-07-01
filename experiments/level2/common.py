@@ -1,9 +1,52 @@
 from __future__ import annotations
 
+import csv
+from pathlib import Path
 from time import perf_counter
 
 import torch
 from torch import nn
+
+
+REQUIRED_GATE_SETS = {
+    "qwen": {
+        "linear_gemm_qwen_seq",
+        "linear_output_projection",
+        "embedding_qwen_vocab_width",
+    },
+    "resnet": {
+        "resnet_conv3x3",
+        "resnet_layer2_stride2_3x3",
+        "resnet_layer3_stride2_3x3",
+        "resnet_layer4_stride2_3x3",
+        "resnet_downsample",
+        "adaptive_avgpool2d_resnet_global",
+    },
+}
+REQUIRED_GATE_SETS["all"] = REQUIRED_GATE_SETS["qwen"] | REQUIRED_GATE_SETS["resnet"]
+
+
+def require_speed_gates(path: Path, gate_set: str) -> None:
+    required = REQUIRED_GATE_SETS[gate_set]
+    with path.open() as handle:
+        rows = list(csv.DictReader(handle))
+    by_name = {row["subkernel"]: row for row in rows}
+    missing = sorted(required - set(by_name))
+    failed = sorted(
+        name
+        for name in required & set(by_name)
+        if str(by_name[name].get("passes_speed_gate", "")).lower() != "true"
+    )
+    if missing or failed:
+        details = []
+        if missing:
+            details.append(f"missing gates: {', '.join(missing)}")
+        if failed:
+            details.append(f"failed gates: {', '.join(failed)}")
+        raise RuntimeError(
+            f"Level 2 {gate_set} metrics require passing native speed gates "
+            f"in {path}: {'; '.join(details)}"
+        )
 
 
 class TinyDyadicNet(nn.Module):

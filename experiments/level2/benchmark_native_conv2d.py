@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dyadic_quant.dyadic_torch import encode_tensor_per_output_channel
+from dyadic_quant.level1 import encode_tensor_per_output_channel
 from dyadic_quant.level2.native import (
     build_native_cpu,
     dyadic_conv2d_packed_native_cpu,
@@ -73,7 +73,14 @@ def benchmark_shape(
     bias = torch.randn(weight_shape[0], generator=generator)
     encoded = encode_tensor_per_output_channel(weight, max_bits=8)
     decoded = encoded.decode(bits)
-    packed = pack_native_cpu_weight(encoded, bits=bits)
+    packed = pack_native_cpu_weight(
+        encoded.signs,
+        encoded.magnitude_code,
+        encoded.exponents,
+        encoded.max_bits,
+        encoded.group_size,
+        bits,
+    )
 
     expected, torch_ms = time_call(
         lambda: F.conv2d(inputs, decoded, bias=bias, stride=stride, padding=padding),
@@ -84,9 +91,11 @@ def benchmark_shape(
         lambda: dyadic_conv2d_packed_native_cpu(
             inputs,
             packed,
-            bias=bias,
-            stride=stride,
-            padding=padding,
+            bias,
+            stride,
+            padding,
+            weight_shape[2],
+            weight_shape[3],
         ),
         warmup=warmup,
         repeats=repeats,
