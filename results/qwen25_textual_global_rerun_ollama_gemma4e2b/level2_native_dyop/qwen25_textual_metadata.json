@@ -1,0 +1,21 @@
+{
+  "generations_file": "results/qwen25_textual_global_rerun_ollama_gemma4e2b/level2_native_dyop/qwen25_dyop_generations.json",
+  "source_variant": "bf16_source",
+  "variants": [
+    "dyop_native_4",
+    "dyop_native_5",
+    "dyop_native_6",
+    "dyop_native_8"
+  ],
+  "embed_model": "nomic-embed-text",
+  "judge_backend": "ollama",
+  "judge_model": "gemma4:e2b",
+  "judge_model_arg": "gemma4:e2b",
+  "judge_timeout": 240.0,
+  "judge_enabled": true,
+  "output_dir": "results/qwen25_textual_global_rerun_ollama_gemma4e2b/level2_native_dyop",
+  "row_count": 120,
+  "missing_judge_equivalent": 0,
+  "judge_batch_size": 1,
+  "last_completed_by": "experiments/level2/complete_missing_judges.py"
+}

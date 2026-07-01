@@ -1,0 +1,22 @@
+{
+  "level1_generations": "results/qwen25_generations.json",
+  "level2_generations": "results/level2/qwen25_dyop_generations.json",
+  "level1_summary": "results/qwen25_textual_summary.csv",
+  "level2_summary": "results/level2/qwen_textual_full_native6_8/qwen25_textual_summary.csv",
+  "level1_comparison": "results/qwen25_textual_comparison.csv",
+  "level2_comparison": "results/level2/qwen_textual_full_native6_8/qwen25_textual_comparison.csv",
+  "source_variant": "bf16_source",
+  "prompts_equal": true,
+  "source_generations_equal": true,
+  "level1_missing_judges": 0,
+  "level2_missing_judges": 0,
+  "notes": [
+    "ARC is the stronger free-generation LLM-judge family here: the source task asks for a constrained answer and explanation.",
+    "WikiText is an unconstrained continuation task for an instruct model; low judge-equivalence can reflect early free-running divergence even when cosine remains moderate."
+  ],
+  "artifacts": {
+    "deltas": "results/level2/qwen_textual_level1_level2_audit/qwen_l1_l2_textual_deltas.csv",
+    "level1_family_strength": "results/level2/qwen_textual_level1_level2_audit/qwen_level1_family_strength.csv",
+    "level2_family_strength": "results/level2/qwen_textual_level1_level2_audit/qwen_level2_family_strength.csv"
+  }
+}

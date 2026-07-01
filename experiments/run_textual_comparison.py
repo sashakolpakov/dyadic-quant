@@ -29,11 +29,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--arc-count", type=int, default=20)
     parser.add_argument("--wikitext-count", type=int, default=10)
     parser.add_argument("--max-new-tokens", type=int, default=128)
+    parser.add_argument("--bits", nargs="+", type=int, default=[4, 5, 6, 8])
+    parser.add_argument(
+        "--group-sizes",
+        nargs="*",
+        type=int,
+        default=[],
+        help=(
+            "Optional extra Level 1 grouped dyadic passes. A value of 32 "
+            "produces variants named dyadic_g32_<bits>."
+        ),
+    )
+    parser.add_argument(
+        "--control-lineage",
+        type=Path,
+        help=(
+            "GGUF control lineage JSON. Defaults to qwen25_control_lineage.json "
+            "inside the output directory."
+        ),
+    )
     parser.add_argument(
         "--judge-model",
         default="",
         help="Optional judge model override; empty uses the session default.",
     )
+    parser.add_argument(
+        "--judge-backend",
+        choices=["claude", "ollama"],
+        default="claude",
+    )
+    parser.add_argument("--judge-timeout", type=float, default=180.0)
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument(
         "--skip-generation",
@@ -78,16 +103,34 @@ def main() -> None:
                 "--dyadic-prefix",
                 "dyadic",
                 "--bits",
-                "4",
-                "5",
-                "6",
-                "8",
+                *[str(bits) for bits in args.bits],
             ]
         )
+        for group_size in args.group_sizes:
+            run(
+                [
+                    python,
+                    str(root / "experiments/run_textual_generation.py"),
+                    *common_gen,
+                    "--variant",
+                    "bf16_source",
+                    "--skip-reference-generation",
+                    "--dyadic-prefix",
+                    f"dyadic_g{group_size}",
+                    "--group-size",
+                    str(group_size),
+                    "--bits",
+                    *[str(bits) for bits in args.bits],
+                ]
+            )
         # Dequantized GGUF controls.
-        lineage = json.loads(
-            (output / "qwen25_control_lineage.json").read_text()
-        )
+        lineage_path = args.control_lineage or (output / "qwen25_control_lineage.json")
+        if not lineage_path.exists():
+            raise RuntimeError(
+                f"GGUF control lineage not found: {lineage_path}. "
+                "Pass --control-lineage for separated rerun directories."
+            )
+        lineage = json.loads(lineage_path.read_text())
         for key, variant in lineage["variants"].items():
             run(
                 [
@@ -111,6 +154,10 @@ def main() -> None:
         str(output),
         "--judge-model",
         args.judge_model,
+        "--judge-backend",
+        args.judge_backend,
+        "--judge-timeout",
+        str(args.judge_timeout),
     ]
     if args.no_judge:
         compare.append("--no-judge")

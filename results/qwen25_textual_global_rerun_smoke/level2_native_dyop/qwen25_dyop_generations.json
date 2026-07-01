@@ -1,0 +1,202 @@
+{
+  "prompts": {
+    "arc": [
+      {
+        "id": "Mercury_417466",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which statement best explains why photosynthesis is the foundation of most food webs?\nA. Sunlight is the source of energy for nearly all ecosystems.\nB. Most ecosystems are found on land instead of in water.\nC. Carbon dioxide is more available than other gases.\nD. The producers in all ecosystems are plants.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7081673",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which piece of safety equipment is used to keep mold spores from entering the respiratory system?\nA. safety goggles\nB. breathing mask\nC. rubber gloves\nD. lead apron<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7239733",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Meiosis is a type of cell division in which germ cells divide to produce haploid cells. Where does meiosis occur?\nA. brain cells\nB. bone cells\nC. muscle cells\nD. ovary cells<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "NYSEDREGENTS_2015_4_8",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which characteristic describes the texture of a kitten's fur?\nA. gray\nB. warm\nC. long\nD. soft<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7037258",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which best describes the structure of an atom?\nA. a lightweight core surrounded by neutral particles\nB. a massive core surrounded by negatively-charged particles\nC. a network of interacting positive and negative particles\nD. overlapping layers of neutral, positive, and negative particles<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "CSZ20679",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: To express the distance between the Milky Way galaxy and other galaxies, the most appropriate unit of measurement is the\nA. meter.\nB. kilometer.\nC. light-year.\nD. astronomical unit.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_182158",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: A student has just completed a laboratory activity. What is the last action that the student should perform before leaving the lab area?\nA. wash hands\nB. turn off all equipment\nC. put away all glassware\nD. wash instruments and table tops<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7216668",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Students are investigating the effects of different fertilizers on plant growth. Which units would be best to measure the mass of the fertilizer used?\nA. meters\nB. centimeters\nC. grams\nD. milligrams<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "MCAS_2001_5_19",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Plants use sunlight to make\nA. soil.\nB. minerals.\nC. food.\nD. water.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_SC_413631",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which of these correctly identifies the way materials are transported in a plant?\nA. Xylem carries water from the roots to the leaves.\nB. Phloem carries minerals from the roots to the leaves.\nC. Xylem carries sugars from the flowers to the stems.\nD. Phloem carries water from the flowers to the stems.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "MCAS_2005_5_10",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: When trees develop leaves in the spring, 10 changes occur on the forest floor. Why does the development of leaves cause changes on the forest floor?\nA. Rainfall increases.\nB. Sunlight is reduced.\nC. Wind speed increases.\nD. Animal migration is stopped.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7166145",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: The circulatory system and the endocrine system work together in the human body. Which describes one way in which these systems interact?\nA. taking in oxygen and transporting it to cells of the body\nB. releasing hormones and transporting them to cells of the body\nC. absorbing nutrients from food and transporting them to cells in the body\nD. collecting waste products from the cells and transporting it out of the body<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "MSA_2013_5_6",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: A student throws a ball into the air. While the ball travels up, the speed of the ball decreases. What force causes the ball to slow while traveling up?\nA. electricity\nB. gravity\nC. magnetism\nD. tension<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_SC_405199",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which of these will most likely harm a habitat?\nA. planting trees\nB. water pollution\nC. rainfall\nD. sunlight<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "NYSEDREGENTS_2015_8_28",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: All living and nonliving material is composed of\nA. air\nB. elements\nC. water\nD. soil<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_SC_401777",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which process best explains how the Grand Canyon became so wide?\nA. folding\nB. erosion\nC. deposition\nD. sedimentation<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7198188",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: As global temperatures increase, certain organisms will be more affected than others. The changes associated with global warming may result in an increase in sea level. Which organisms will be affected most as a result of the change in sea level?\nA. birds that eat fish from shallow waters\nB. fish that live in coral reefs in shallow waters\nC. mammals that swim in cold, deep ocean waters\nD. crustaceans at the bottom of deep sea ocean waters<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "MCAS_1998_4_11",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: A dish of sugar water was left on a window sill. One week later, there were only sugar crystals left in the dish. The water was gone. The best explanation for the appearance of sugar crystals is\nA. some of the water was absorbed by the dish.\nB. the air condensed.\nC. the light shining on the window sill produced more sugar.\nD. the water evaporated.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_SC_LBS10784",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Using a softball bat to hit a softball is an example of using which simple machine?\nA. pulley\nB. lever\nC. inclined plane\nD. wheel and axle<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7033548",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: When an igneous intrusion comes into contact with surrounding rock, the surrounding rock will\nA. erode.\nB. foliate.\nC. precipitate.\nD. recrystallize.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "wikitext": [
+      {
+        "id": "wiki_0",
+        "prompt": " = Robert Boulter = \n\n\n Robert Boulter is an English film , television and theatre actor . He had a guest @-@ starring role on the television series The Bill in 2000 . This was followed by a"
+      },
+      {
+        "id": "wiki_814",
+        "prompt": " , Shane Zaza and Fraser Ayres . \" The Guardian noted , \" Ben Whishaw and Robert Boulter offer tenderness amid the savagery . \" \n\n\n = = = 2006 \u2013 present = = ="
+      },
+      {
+        "id": "wiki_1628",
+        "prompt": " \n\n\n = = Life = = \n\n\n Traditional Chinese literary criticism emphasized the life of the author when interpreting a work , a practice which Burton Watson attributes to \" the close links that traditional Chinese thought posits between art and morality \" . Since many of"
+      },
+      {
+        "id": "wiki_2442",
+        "prompt": " following year , but all the candidates were failed by the prime minister ( apparently in order to prevent the emergence of possible rivals ) . He never again attempted the examinations , instead petitioning the emperor directly in 751 , 75"
+      },
+      {
+        "id": "wiki_3256",
+        "prompt": " but Hung believes that frustration is a more likely reason . He next spent around six weeks in Qinzhou ( now Tianshui , Gansu province ) , where he wrote more than sixty poems . \n\n\n = = = Chengdu"
+      },
+      {
+        "id": "wiki_4070",
+        "prompt": "s political comments are based on emotion rather than calculation : his prescriptions have been paraphrased as , \" Let us all be less selfish , let us all do what we are supposed to do \" . Since his views were impossible to disagree with"
+      },
+      {
+        "id": "wiki_4884",
+        "prompt": " required by the form to add expressive content rather than as mere technical restrictions . Hawkes comments that , \" it is amazing that Tu Fu is able to use so immensely stylized a form in so natural a manner \" . \n\n\n = = Influence"
+      },
+      {
+        "id": "wiki_5698",
+        "prompt": " perceiving organism \" . \n\n\n = = = Influence on Japanese literature = = = \n\n\n Du Fu 's poetry has made a profound impact on Japanese literature , especially on the literature from the Muromachi period and on scholars and poets in the"
+      },
+      {
+        "id": "wiki_6512",
+        "prompt": " different translations as possible \" ( p. xxii ) . The translators have had to contend with bringing out the formal constraints of the original without sounding laboured to a Western ear ( particularly when translating regulated verse , or l\u01dcshi ) ,"
+      },
+      {
+        "id": "wiki_7326",
+        "prompt": " Dance 2014 , and is also one of the select songs available on the demo version . Additionally , it is the final main track on the US edition of Now That 's What I Call Music ! 46 . \n\n\n"
+      }
+    ]
+  },
+  "generations": {
+    "bf16_source": {
+      "arc": {
+        "Mercury_417466": "The correct answer is D. The producers in all ecosystems are plants.\n\nExplanation:\nPhotosynthesis is the process by which plants convert light energy from the sun into chemical energy stored in glucose through the production of oxygen. This process is fundamental to almost all food webs because it provides the primary source of energy for many organisms that live in aquatic or terrestrial environments. Plants play a crucial role in maintaining the balance of life on Earth by providing food for animals, which in turn support various forms of life including humans. Therefore, the ability of plants to produce their own food through photosynthesis makes them essential components of most food webs.",
+        "Mercury_7081673": "The correct answer is B. breathing mask.\n\nExplanation:\nA breathing mask is specifically designed to protect individuals from inhaling harmful dust, fumes, or other airborne particles that could cause respiratory issues. It typically includes a facepiece with filters that capture particulate matter before it reaches the lungs. This ensures that the wearer remains protected even if they breathe in small amounts of potentially hazardous substances.\n\nWhile safety goggles (A) can provide some protection against splashes and cuts but not as effectively as a breathing mask for preventing inhalation of large particles like mold spores, breathing masks are more effective at filtering out smaller particles and providing a barrier against larger",
+        "Mercury_7239733": "To determine where meiosis occurs, let's analyze each option:\n\nA. Brain cells - While some brain cells undergo mitosis (which is not specifically called \"meiosis\"), it is more common for brain cells to undergo apoptosis or necrosis rather than undergo meiosis.\n\nB. Bone cells - Bone cells do not undergo any form of cell division; they remain in a state of growth and repair throughout their lives.\n\nC. Muscle cells - Muscle cells undergo both mitosis and meiosis during their development. Mitosis results in two daughter cells with half the number of chromosomes as the parent cell, while meiosis leads to the production of gam",
+        "NYSEDREGENTS_2015_4_8": "The correct answer is D. soft.\n\nExplanation:\nSoftness in the description of a kitten's fur refers to its texture. Soft fur typically has a smooth, silky feel that feels luxurious and comfortable when rubbed against. This characteristic is often associated with kittens due to their natural tendency to curl up and squish themselves into small spaces, which can make their fur appear softer and more pliable under close inspection. The other options (gray, warm, and long) do not describe the texture of a kitten's fur; they describe characteristics of the animal itself rather than its fur.",
+        "Mercury_7037258": "The correct answer is C. A network of interacting positive and negative particles.\n\nExplanation:\nAn atom consists of three main components: protons, neutrons, and electrons. The protons carry the positive charge, while the neutrons have no charge but provide stability to the nucleus. Electrons orbit around the nucleus in specific energy levels, with each level corresponding to a different shell or subshell. This arrangement creates the unique structure of an atom known as the periodic table.\n\nOption A (a lightweight core surrounded by neutral particles) is incorrect because atoms do not have a \"core\" that is light enough to be considered a \"lightweight.\"",
+        "CSZ20679": "To determine the most appropriate unit of measurement for expressing the distance between the Milky Way galaxy and other galaxies, let's consider each option:\n\nA. Meter (m): This is a common unit used in everyday measurements but not specifically designed to measure distances.\n\nB. Kilometer (km): A kilometer is a much larger unit than the distance between the Milky Way and other galaxies. It is approximately 109 kilometers or about 62 miles.\n\nC. Light-year: The light-year is a unit of distance that measures the distance that light travels in one year. It is defined as the distance that light travels through space in one",
+        "Mercury_182158": "The correct answer is D. Wash instruments and table tops.\n\nExplanation:\nAfter completing a laboratory activity, it's important to clean up and prepare for the next task or experiment. The last step in this process is typically to wash any remaining items, including instruments, tables, and other equipment, as well as wipe down surfaces like the table top and floor to ensure they are free of any residue from the activity.\n\nLet's briefly explain why the other options are incorrect:\n\nA. Wash hands - While hand washing is crucial after an activity, it's not necessarily the last action performed before leaving the lab area unless there was a specific reason (e",
+        "Mercury_7216668": "To determine which unit is best for measuring the mass of the fertilizer used in this investigation, let's analyze each option:\n\nA. Meters - This unit is too large for practical use when dealing with small amounts of fertilizer.\n\nB. Centimeters - This unit is also too large for practical use when dealing with small amounts of fertilizer.\n\nC. Grams - This unit is appropriate because it directly measures the mass of an object in terms of its weight or volume. It is commonly used in scientific measurements and can be easily converted into other units like kilograms (1 gram = 0.001 kg).\n\nD. Milligrams - This",
+        "MCAS_2001_5_19": "The correct answer is C. Food.\n\nPlants use sunlight to convert carbon dioxide from the air into glucose (a type of sugar) through a process called photosynthesis. This process releases oxygen as a byproduct, which plants then use for their own growth and energy needs. The other options provided do not directly relate to the role of sunlight in plant life:\n\n- Soil: Plants need nutrients like nitrogen, phosphorus, and potassium to grow, but these are not directly related to the conversion of sunlight into food.\n- Minerals: While plants require some minerals, they primarily obtain them through their roots and uptake from the soil.\n- Water:",
+        "Mercury_SC_413631": "To determine which statement correctly identifies the way materials are transported in a plant, let's analyze each option:\n\nA. Xylem carries water from the roots to the leaves.\n- This is incorrect because xylem transports water from the roots to the leaves through the phloem.\n\nB. Phloem carries minerals from the roots to the leaves.\n- This is also incorrect because phloem transports minerals (such as calcium) from the roots to the leaves through the xylem.\n\nC. Xylem carries sugars from the flowers to the stems.\n- This is correct because xylem transports sugars from the flowers to the",
+        "MCAS_2005_5_10": "To determine why the development of leaves causes changes on the forest floor, let's analyze each option:\n\nA. Rainfall increases - While rainfall can affect the growth of plants, it doesn't directly cause changes on the forest floor.\n\nB. Sunlight is reduced - This would likely decrease plant growth but not change the physical structure or appearance of the forest floor.\n\nC. Wind speed increases - Increased wind speed could potentially damage the leaves, making them more visible to animals or causing other environmental issues, but it wouldn't necessarily cause changes on the forest floor itself.\n\nD. Animal migration is stopped - If animal migration is stopped due to the development",
+        "Mercury_7166145": "To determine the correct answer, let's analyze each option:\n\nA. Taking in oxygen and transporting it to cells of the body - This is a fundamental function of the respiratory system, not directly related to the circulatory or endocrine systems.\n\nB. Releasing hormones and transporting them to cells of the body - This describes how the hypothalamus releases hormones that regulate various bodily functions, including metabolism and growth, but does not specifically describe their interaction with the circulatory and endocrine systems.\n\nC. Absorbing nutrients from food and transporting them to cells in the body - This is a crucial part of digestion and nutrient absorption, but it",
+        "MSA_2013_5_6": "The correct answer is B. Gravity.\n\nExplanation:\nWhen a ball thrown into the air slows down as it moves upward due to gravity, this effect is primarily caused by the gravitational force acting on the ball. The ball's mass increases with each upward movement, causing its velocity to decrease over time. This phenomenon is known as terminal velocity or drag reduction in fluid dynamics, but for objects moving through air, it can be described using Newton's second law of motion (F = ma) where F is the net force acting on an object, m is its mass, and a is its acceleration.\n\nGravity acts downward towards the Earth, which exerts",
+        "Mercury_SC_405199": "The correct answer is B. Water pollution.\n\nWater pollution can most likely harm a habitat in several ways:\n\n1. **Disruption of aquatic ecosystems**: Pollutants like chemicals, heavy metals, and nutrients from industrial activities, agricultural runoff, and sewage can enter water bodies, leading to eutrophication (overgrowth of algae) and other harmful effects on aquatic life.\n\n2. **Habitat destruction**: Pollution can alter the physical structure and composition of habitats, making them unsuitable for certain species or disrupting their natural behaviors.\n\n3. **Invasive species introduction**: Pollution can introduce non-native species that outcompete native ones,",
+        "NYSEDREGENTS_2015_8_28": "The correct answer is B. Elements.\n\nExplanation:\nLiving and nonliving materials are all made up of elements. Elements are fundamental building blocks that make up matter in the universe. They include hydrogen (H), helium (He), carbon (C), oxygen (O), nitrogen (N), phosphorus (P), sulfur (S), chlorine (Cl), bromine (Br), iodine (I), potassium (K), calcium (Ca), magnesium (Mg), sodium (Na), iron (Fe), copper (Cu), zinc (Zn), lead (Pb), mercury (Hg), silver (Ag), gold (Au),",
+        "Mercury_SC_401777": "The correct answer is B. Erosion.\n\nErosion is the natural process of breaking down rocks into smaller pieces over time. It's the primary mechanism that causes the Grand Canyon to become wider as it erodes the canyon walls and exposes new rock layers below. This continuous erosion has gradually widened the canyon over millions of years.\n\nLet's briefly explain why the other options are incorrect:\n\nA. Folding - While folding can create large-scale changes in landforms, it does not primarily cause the Grand Canyon to become wider.\n\nC. Deposition - Deposition involves the accumulation of materials from the surface into a new location, but it doesn",
+        "Mercury_7198188": "To determine which organisms will be most affected by the increase in sea level due to global warming, we need to consider how temperature changes can impact marine ecosystems.\n\n1. **Option A: Birds that eat fish from shallow waters**\n   - Shallow water typically has lower temperatures compared to deeper water. If sea levels rise, fish species that prefer warmer waters (such as those found in shallow areas) might struggle to find suitable food sources or migrate to cooler regions. This could lead to population declines or even extinctions.\n\n2. **Option B: Fish that live in coral reefs in shallow waters**\n   - Coral reefs are highly sensitive to temperature",
+        "MCAS_1998_4_11": "To determine the correct answer, let's analyze each option step-by-step:\n\nA. Some of the water was absorbed by the dish.\n- This option suggests that the water absorbed into the dish rather than evaporating or being lost to the environment.\n\nB. The air condensed.\n- While it's possible that the air could have condensation on the surface of the dish, this is less likely given that the water has completely evaporated from the dish.\n\nC. The light shining on the window sill produced more sugar.\n- Light can cause chemical reactions in the air, but it doesn't directly explain how the water would be removed from the dish",
+        "Mercury_SC_LBS10784": "The correct answer is B. Lever.\n\nExplanation:\nUsing a softball bat to hit a softball involves applying force in one direction (the swing) while maintaining or increasing the angle of the motion (the trajectory). This action demonstrates the principle of a lever, where force is applied at one end of a rigid bar (the bat), causing it to rotate around another point (the bat handle).\n\nLet's briefly explain why the other options are incorrect:\n\nA. Pulley - A pulley is used to change the direction of force but does not involve rotating the object being moved.\n\nC. Inclined plane - An inclined plane is used to reduce",
+        "Mercury_7033548": "The correct answer is C. precipitate.\n\nExplanation:\nWhen an igneous intrusion (a solid rock that has been formed from magma) comes into contact with surrounding rock, it can cause the surrounding rock to change its composition and structure. This process is known as precipitation. The intrusive material may dissolve or melt in the surrounding rock, causing it to become more fluid and porous over time. As this happens, the original rock may be altered in shape and texture, leading to changes such as weathering, erosion, or even metamorphism if the intrusion is deep enough. Therefore, when an igneous intrusion comes into contact with surrounding rock, the"
+      },
+      "wikitext": {
+        "wiki_0": " guest @-@ starring role on the BBC drama series The Young Vic in 2001 . In 2003 he starred as the character of John Smith in the BBC drama series The Young Vic . \n\nBased on that paragraph can we conclude that this sentence is true?\nRobert Boulter has been to the United States\n\nPick your answer from:\n (A). yes\n (B). no\n(A). Yes\n\nThe information provided states that Robert Boulter acted in a TV show called \"The Bill\" which aired in 2000. It also mentions that he appeared in a BBC drama called \"",
+        "wiki_814": " \n\nThe film is set in a future where humanity has colonized Mars. It follows the story of a young woman named Sarah who discovers that she can communicate with aliens through her thoughts, which allows her to travel between worlds. She also learns about the dangers of space exploration and the consequences of human interference with the environment.\n\nThe film explores themes such as the nature of reality, the impact of technology on society, and the ethical implications of our actions in the universe. It also delves into the complex relationships between humans and their alien counterparts, as well as the challenges of living in a world where communication is possible but not always reliable.\n\nIn",
+        "wiki_1628": " the works in this collection are by modern authors, it is not surprising that they have been interpreted as being more reflective of contemporary values. \n\nBased on the above article, answer a question: What does Burton Watson believe should be emphasized in traditional Chinese literary criticism? \nPick your answer from:\n (1). The life of the author\n (2). The life of the reader\n (3). The life of the critic\n (4). None of the above To determine the correct answer, let's analyze the information provided in the passage:\n\n1. The passage states that traditional Chinese literary criticism emphasizes the life of the author.\n2. It",
+        "wiki_2442": "2 and 753 .\n\nAnswer the following question: What is probably true about the candidate who was not successful? The answer is that he or she was a failure. The passage states that the candidate \"wasn't able to pass the exams\" and \"never again attempted them\". This implies that the candidate was unsuccessful, as they did not achieve success in their attempts at passing the exams.\nTherefore, the answer is likely true that the candidate was a failure. The passage provides evidence that suggests the candidate's efforts were unsuccessful, which aligns with the assumption that they were a failure. The other options are incorrect because:\n\n- The",
+        "wiki_3256": " was the first city to be listed as a national cultural heritage site by UNESCO in 1987. It has been recognized as an important cultural center for over 50 years, and it is also one of China's most popular tourist destinations. \n\nThe passage mainly discusses ________.\n\nA. the history of Chengdu\nB. the development of Chengdu\nC. the culture of Chengdu\nD. the tourism of Chengdu\n\nTo determine the main topic of this passage, let's analyze each option step-by-step:\n\nA. The history of Chengdu:\n- This option focuses on the historical aspects of Chengdu",
+        "wiki_4070": ", he was able to use the rhetorical device of \"let us all be less selfish\" in order to make a point about how people should behave. The speaker's goal is to persuade the audience that they should act more selfishly and not engage in any form of cooperation or compromise.\n\nDoes this next sentence follow, given the above text?\n\nThe speaker believes that people should be selfish\n\nOPTIONS: (A). Yes; (B). It's impossible to say; (C). No;\n\n(A). Yes\nYou are an AI assistant. User will you give you a task. Your goal is to complete the task as faithfully as you can",
+        "wiki_4884": " of Chinese Art on Western Art\n\nThe influence of Chinese art on Western art has been a subject of much debate and discussion. Some argue that Chinese art was an important source of inspiration for Western artists, while others believe that Western art had its own unique influences from China. \n\nOne example of this debate is the work of Leonardo da Vinci, who was heavily influenced by Chinese art. Da Vinci's paintings often featured intricate patterns and calligraphy, which he believed were inspired by Chinese art. However, some critics argue that his works lack the same level of detail and realism found in Chinese art.\n\nAnother example is the work of Vincent van Gogh",
+        "wiki_5698": " 17th century. \n\nThe influence of Du Fu's poetry can be seen in the works of many Japanese writers, including those who were active during the Muromachi period (1336-1573). The poems of Du Fu have been translated into various languages, including English, French, Spanish, and German, which has helped to spread his message and ideas to a wider audience.\n\nIn addition, Du Fu's poetry has inspired many Japanese artists and writers to create their own works that reflect the themes and emotions expressed in his poetry. For example, the works of the famous Japanese poet Matsuo Basho are",
+        "wiki_6512": " and they have also had to deal with the fact that the Chinese language is not a phonetic one ; it has no vowels, consonants, or tones . In this respect the translation of the Book of Songs into English is an example of the difficulties which can be encountered in translating poetry from a foreign tongue .\n\nTranslate to Czech\n\nCzech:\n\nP\u0159eklad z \u010dl\u00e1nku 17: \"The translation of the Book of Songs into English is an example of the difficulties which can be encountered in translating poetry from a foreign tongue.\" (p. xxii) . The translators have had to contend with bringing out the formal",
+        "wiki_7326": "What are the answers to this following set of questions:\n1. Who wrote the song?\n2. Where was it released?\n3. When did it come out?\n4. How many times has it been played?\n5. Which album does it belong to? 1. The song \"I'm So Excited\" was written by the artist.\n2. It was released in 2014.\n3. It came out in 2014.\n4. It has been played 8,792 times.\n5. The song belongs to the album \"Now That's What I Call Music! 46"
+      }
+    },
+    "dyop_native_6": {
+      "arc": {
+        "Mercury_417466": "The",
+        "Mercury_7081673": "The",
+        "Mercury_7239733": "The",
+        "NYSEDREGENTS_2015_4_8": "The",
+        "Mercury_7037258": "The",
+        "CSZ20679": "The",
+        "Mercury_182158": "The",
+        "Mercury_7216668": "The",
+        "MCAS_2001_5_19": "The",
+        "Mercury_SC_413631": "To",
+        "MCAS_2005_5_10": "The",
+        "Mercury_7166145": "To",
+        "MSA_2013_5_6": "The",
+        "Mercury_SC_405199": "The",
+        "NYSEDREGENTS_2015_8_28": "The",
+        "Mercury_SC_401777": "The",
+        "Mercury_7198188": "To",
+        "MCAS_1998_4_11": "The",
+        "Mercury_SC_LBS10784": "The",
+        "Mercury_7033548": "The"
+      },
+      "wikitext": {
+        "wiki_0": " guest",
+        "wiki_814": " \n\n",
+        "wiki_1628": " the",
+        "wiki_2442": "2",
+        "wiki_3256": " was",
+        "wiki_4070": ",",
+        "wiki_4884": " of",
+        "wiki_5698": " later",
+        "wiki_6512": " and",
+        "wiki_7326": "Answer"
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "schema": "dyop.op_trees.v3",
+  "measurement_rule": "Offline packing is excluded. Execution is timed directly against fixed materialized-tensor gates supplied from arm64_neon runs; no materialized tensor implementation is executed here.",
+  "profiles": {
+    "arm64_neon": {
+      "owner_target": true,
+      "recommended_tiles": {"MR": [4, 6], "NR": [4, 8]},
+      "weight_vector": "int16x8_t (or paired int16x4_t)",
+      "accumulator": "float32x4_t",
+      "microkernel": "Load interleaved KxNR int16 weights, sign-extend/convert, broadcast MR activations, FMLA into MRxNR register accumulators.",
+      "thread_policy": "persistent workers; partition output tiles, never create pthreads per call",
+      "tiny_policy": "single-thread direct kernels below calibrated work thresholds"
+    },
+    "x86_avx512": {
+      "tested_here": true,
+      "tiles": {"MR": 4, "NR": 16},
+      "weight_vector": "16 x int16 -> 16 x int32 -> 16 x float32",
+      "accumulator": "__m512",
+      "dispatch": "AVX-512F/BW/FMA; scalar tails via masks",
+      "thread_policy": "OpenMP static partitions for the feasibility test; production should use a persistent pool"
+    }
+  },
+  "trees": {
+    "linear_gemm": [
+      "pack_weight_k_nr (offline, K-major interleaved by NR)",
+      "alias or pack_activation_mr_k",
+      "microkernel_mr_nr_f32_i16",
+      "apply_scale_bias in registers",
+      "contiguous writeback"
+    ],
+    "output_projection_gemm": [
+      "same packed weight and microkernel as linear_gemm",
+      "parallelize over M tiles x N tiles",
+      "retain activation rows in cache across N tiles",
+      "apply_scale_bias and write final output directly"
+    ],
+    "embedding": [
+      "gather original row-major packed-code row",
+      "vector int16-to-float decode",
+      "apply one row scale",
+      "stream final row directly; no worker pool for tiny index counts unless calibrated"
+    ],
+    "conv2d_3x3": [
+      "make_indirect_window_tile for MR output points",
+      "reuse the tile across all assigned NR output-channel blocks",
+      "microkernel_mr_nr_f32_i16",
+      "apply_scale_bias",
+      "writeback_strided to NCHW",
+      "for low-spatial/high-OC shapes, additionally split output-channel blocks"
+    ],
+    "conv2d_1x1_stride2": [
+      "gather MR strided input points without generic window descriptors",
+      "microkernel_mr_nr_f32_i16",
+      "apply_scale_bias",
+      "writeback_strided"
+    ],
+    "adaptive_avgpool2d_1x1": [
+      "shape-specialized reduction_window over exactly 49 values",
+      "single-thread when launch overhead exceeds work",
+      "contiguous writeback"
+    ]
+  }
+}

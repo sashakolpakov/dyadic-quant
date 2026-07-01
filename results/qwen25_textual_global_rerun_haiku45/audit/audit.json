@@ -1,0 +1,29 @@
+{
+  "level1_generations": "results/qwen25_textual_global_rerun_haiku45/level1_materialized/qwen25_generations.json",
+  "level2_generations": "results/qwen25_textual_global_rerun_haiku45/level2_native_dyop/qwen25_dyop_generations.json",
+  "level1_summary": "results/qwen25_textual_global_rerun_haiku45/level1_materialized/qwen25_textual_summary.csv",
+  "level2_summary": "results/qwen25_textual_global_rerun_haiku45/level2_native_dyop/qwen25_textual_summary.csv",
+  "level1_comparison": "results/qwen25_textual_global_rerun_haiku45/level1_materialized/qwen25_textual_comparison.csv",
+  "level2_comparison": "results/qwen25_textual_global_rerun_haiku45/level2_native_dyop/qwen25_textual_comparison.csv",
+  "level1_metadata": "results/qwen25_textual_global_rerun_haiku45/level1_materialized/qwen25_textual_metadata.json",
+  "level2_metadata": "results/qwen25_textual_global_rerun_haiku45/level2_native_dyop/qwen25_textual_metadata.json",
+  "source_variant": "bf16_source",
+  "prompts_equal": true,
+  "source_generations_equal": true,
+  "level1_missing_judges": 252,
+  "level2_missing_judges": 120,
+  "level1_judge_model": "claude-haiku-4-5-20251001",
+  "level2_judge_model": "claude-haiku-4-5-20251001",
+  "level1_embed_model": "nomic-embed-text",
+  "level2_embed_model": "nomic-embed-text",
+  "judge_metadata_comparable": true,
+  "notes": [
+    "ARC is the stronger free-generation LLM-judge family here: the source task asks for a constrained answer and explanation.",
+    "WikiText is an unconstrained continuation task for an instruct model; low judge-equivalence can reflect early free-running divergence even when cosine remains moderate."
+  ],
+  "artifacts": {
+    "deltas": "results/qwen25_textual_global_rerun_haiku45/audit/qwen_l1_l2_textual_deltas.csv",
+    "level1_family_strength": "results/qwen25_textual_global_rerun_haiku45/audit/qwen_level1_family_strength.csv",
+    "level2_family_strength": "results/qwen25_textual_global_rerun_haiku45/audit/qwen_level2_family_strength.csv"
+  }
+}

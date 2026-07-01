@@ -1,0 +1,10 @@
+subkernel,materialized_gate_ms,x86_native_ms,speedup_vs_arm_gate,best_threads,passes_fixed_gate,correct,op_tree
+linear_gemm_qwen_seq,0.192396,0.089500,2.149676,28,true,true,"pack_weight_k_nr -> alias_activation_rows -> microkernel_4x16 -> apply_scale_bias -> contiguous_writeback"
+linear_output_projection,10.843443,5.915980,1.832907,28,true,true,"pack_weight_k_nr -> alias_activation_rows -> microkernel_4x16 -> apply_scale_bias -> contiguous_writeback"
+embedding_qwen_vocab_width,0.015501,0.003363,4.609627,16,true,true,"persistent_spin_workers -> gather_row -> avx512_i16_to_f32 -> apply_row_scale -> streaming_writeback"
+resnet_conv3x3,3.935540,2.151642,1.829087,28,true,true,"make_indirect_window_tile_4xK -> microkernel_4x16 -> scale_bias -> nchw_strided_writeback"
+resnet_layer2_stride2_3x3,0.347237,0.124096,2.798123,16,true,true,"make_indirect_window_tile_4xK -> microkernel_4x16 -> scale_bias -> nchw_strided_writeback"
+resnet_layer3_stride2_3x3,0.262369,0.110760,2.368815,28,true,true,"make_indirect_window_tile_4xK -> microkernel_4x16 -> scale_bias -> nchw_strided_writeback"
+resnet_layer4_stride2_3x3,0.228865,0.146548,1.561709,28,true,true,"make_indirect_window_tile_4xK -> microkernel_4x16 -> scale_bias -> nchw_strided_writeback"
+resnet_downsample,0.265602,0.127984,2.075272,28,true,true,"gather_stride1x1_activation_tile -> microkernel_4x16 -> scale_bias -> nchw_strided_writeback"
+adaptive_avgpool2d_resnet_global,0.013332,0.002824,4.721582,16,true,true,"persistent_spin_workers -> shape_specialized_reduction_49 -> contiguous_writeback"

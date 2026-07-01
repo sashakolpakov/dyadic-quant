@@ -1,0 +1,3 @@
+family,prompt_id,variant,exact_match,edit_ratio,token_jaccard,cosine,judge_equivalent,judge_reason
+arc,Mercury_417466,dyop_native_4,False,0.42105263157894735,0.2222222222222222,0.8155979637838578,,
+wikitext,wiki_0,dyop_native_4,False,0.32432432432432434,0.0,0.6822368753338681,,

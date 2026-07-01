@@ -1,0 +1,3 @@
+family,variants,mean_cosine_mean,mean_cosine_max,judge_rate_mean,judge_rate_max,judge_rate_min
+arc,4,0.8630411480111831,0.945850412705918,,,
+wikitext,4,0.7299868916087773,0.7944764539595133,,,

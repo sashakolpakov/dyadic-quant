@@ -1,0 +1,190 @@
+{
+  "schema": "dyadic_quant.level2.op_trees.v2",
+  "purpose": "Define native dyop kernel architecture before implementation. A subkernel is eligible for full-model quality runs only after its native op-tree beats the matching materialized tensor subkernel gate.",
+  "target": {
+    "cpu": "arm64_neon",
+    "threading": "persistent pthread worker pool",
+    "no_fallback_rule": "Level 2 native paths must execute native dyop kernels or fail closed; no Torch CPU fallback belongs in a native dyop op-tree."
+  },
+  "research_basis": [
+    {
+      "name": "Arm Compute Library",
+      "url": "https://github.com/ARM-software/ComputeLibrary",
+      "architecture_note": "Convolution is selected among GEMM, Winograd, direct, and indirect-GEMM families with CPU-specific kernels. This argues for per-shape dyop op-trees, not one generic conv loop."
+    },
+    {
+      "name": "Arm Neon Intrinsics Reference",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "architecture_note": "AArch64 Neon provides the vector loads, FMLA, and reductions used inside microkernels, but intrinsics are only the innermost primitive, not the full op-tree."
+    },
+    {
+      "name": "gemmlowp",
+      "url": "https://github.com/google/gemmlowp",
+      "architecture_note": "Low-precision GEMM performance comes from packing and tiled microkernels. Dyop GEMM needs the same structure with dyadic scale application fused after accumulation."
+    },
+    {
+      "name": "Im2win: Memory Efficient Convolution On SIMD Architectures",
+      "url": "https://arxiv.org/abs/2306.14320",
+      "architecture_note": "Convolution speed depends on window/tile ordering and SIMD-friendly reuse, not merely replacing scalar inner products with vector instructions."
+    }
+  ],
+  "valid_native_kernel_tree": [
+    "shape classifier",
+    "weight layout selected for that shape and quantization level",
+    "activation tile or indirect window tile",
+    "worker partition matching tile granularity",
+    "microkernel with fixed MRxNR or spatialxOC shape",
+    "dyadic scale and bias application",
+    "native writeback layout",
+    "subkernel speed gate against materialized tensor baseline"
+  ],
+  "subkernels": [
+    {
+      "name": "embedding",
+      "active_tree": [
+        "validate indices",
+        "partition token rows for large batches",
+        "expand packed int16 dyadic row to float output",
+        "multiply by row scale",
+        "write contiguous embedding row"
+      ],
+      "required_tree": [
+        "sort or bucket hot token rows when the caller permits reordering",
+        "prefetch signed_odd and scale rows",
+        "vectorize int16-to-float expansion",
+        "write multiple contiguous embedding rows per worker chunk"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "fail",
+        "reason": "Current native embedding is a row expand loop and does not beat materialized F.embedding on the measured Qwen shape."
+      }
+    },
+    {
+      "name": "linear_gemv",
+      "active_tree": [
+        "one activation row",
+        "persistent workers partition output rows",
+        "contiguous packed int16 weight row",
+        "Neon float x int16 row dot",
+        "apply dyadic scale and bias",
+        "write output scalar"
+      ],
+      "required_tree": [
+        "keep active row-dot path",
+        "optionally add NR-blocked GEMV only if it beats the row-dot gate",
+        "never route GEMV through a GEMM tile with higher setup overhead"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "pass",
+        "reason": "Measured GEMV and output-projection GEMV beat materialized tensor baselines."
+      }
+    },
+    {
+      "name": "linear_gemm",
+      "active_tree": [
+        "flatten activation rows",
+        "persistent workers partition individual output elements",
+        "run independent packed-row dot per output element",
+        "apply dyadic scale and bias"
+      ],
+      "required_tree": [
+        "pack MR activation rows into a contiguous tile",
+        "prepack NR output-channel dyadic weights in K-major lane order",
+        "compute MRxNR accumulators in registers",
+        "reuse each activation load across NR channels and each weight load across MR rows",
+        "apply one scale and bias per output channel",
+        "write an MRxNR output tile"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "fail",
+        "reason": "Independent output-element dots do not reuse activation or weight loads across rows/channels."
+      }
+    },
+    {
+      "name": "conv2d_1x1",
+      "active_tree": [
+        "pack a small tile of spatial rows",
+        "run one output channel at a time over the tile",
+        "apply dyadic scale and bias",
+        "scatter to NCHW output"
+      ],
+      "required_tree": [
+        "treat 1x1 conv as GEMM with M = batch * output_h * output_w",
+        "pack MR spatial rows from NCHW into an activation tile",
+        "prepack NR output-channel dyadic weights in K-major lane order",
+        "compute MRxNR microkernel",
+        "write NCHW output using fixed plane strides"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "fail",
+        "reason": "Current 1x1 tile worker does not beat materialized tensor conv."
+      }
+    },
+    {
+      "name": "conv2d_3x3_same",
+      "active_tree": [
+        "partition output-channel blocks over workers",
+        "initialize full output plane with bias",
+        "scan input channels",
+        "direct scalar 3x3 neighborhood accumulation",
+        "separate border loop"
+      ],
+      "required_tree": [
+        "split border from interior",
+        "pack or indirectly address MR interior windows",
+        "prepack NR output-channel dyadic weights as K=channels*9 lane-major tiles",
+        "compute spatialxOC microkernel over multiple adjacent output positions",
+        "write contiguous output spans"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "fail",
+        "reason": "Current direct conv loops reload windows and weights too often."
+      }
+    },
+    {
+      "name": "conv2d_3x3_stride2",
+      "active_tree": [
+        "partition output-channel blocks over workers",
+        "initialize output planes with bias",
+        "direct stride-2 3x3 accumulation",
+        "OC8 worker for eligible output-channel counts",
+        "separate first-row/first-column loop"
+      ],
+      "required_tree": [
+        "pack stride-2 MR windows without deinterleave-heavy loads",
+        "prepack NR output-channel dyadic weights in K-major lane order",
+        "compute MRxNR window tile",
+        "apply dyadic scales and bias",
+        "write NCHW output planes"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "fail",
+        "reason": "OC8 stride-2 improves over OC4 but remains below materialized tensor speed."
+      }
+    },
+    {
+      "name": "relu_add_pool",
+      "active_tree": [
+        "partition contiguous elements or output cells",
+        "run native elementwise/add+relu/maxpool loops",
+        "write contiguous outputs"
+      ],
+      "required_tree": [
+        "keep passing native elementwise and maxpool paths",
+        "fuse add+relu in residual blocks",
+        "avoid standalone adaptive average pool overhead by fusing or using a dedicated tiny-shape kernel"
+      ],
+      "gate": {
+        "artifact": "results/level2/subkernel_speed_gates_current.csv",
+        "status": "mixed",
+        "reason": "ReLU/add/add+ReLU/MaxPool2d pass; standalone AdaptiveAvgPool2d fails."
+      }
+    }
+  ]
+}

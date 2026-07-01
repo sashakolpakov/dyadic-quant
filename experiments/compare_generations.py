@@ -7,7 +7,7 @@ BF16 source's text along four axes:
 * edit_ratio   - normalized character similarity (cheap local signal)
 * token_jaccard- whitespace-token set overlap (cheap local signal)
 * cosine       - embedding cosine via a local Ollama nomic-embed-text model
-* judge_*      - same-meaning verdict from a headless Claude Code judge
+* judge_*      - same-meaning verdict from a headless Claude/Ollama judge
 
 The lexical signals catch verbatim drift; cosine and the judge address the case
 the user cares about: outputs that differ on the surface but mean the same thing.
@@ -87,7 +87,54 @@ def judge_prompt(
     )
 
 
-def run_judge(prompt: str, *, model: str | None) -> dict:
+def chunk_items(items: dict[str, str], size: int) -> list[dict[str, str]]:
+    if size <= 0:
+        return [items]
+    pairs = list(items.items())
+    return [dict(pairs[index : index + size]) for index in range(0, len(pairs), size)]
+
+
+def normalize_judge_verdicts(
+    verdicts: dict, expected_variants: set[str]
+) -> dict[str, dict]:
+    normalized: dict[str, dict] = {}
+    for raw_name, verdict in verdicts.items():
+        name = str(raw_name).strip()
+        if name.startswith("VARIANT "):
+            name = name.removeprefix("VARIANT ").strip()
+        if name not in expected_variants and len(expected_variants) == 1:
+            name = next(iter(expected_variants))
+        if name in expected_variants and isinstance(verdict, dict):
+            normalized[name] = verdict
+        elif name in expected_variants and isinstance(verdict, bool):
+            normalized[name] = {"equivalent": verdict, "reason": ""}
+        elif name in expected_variants and isinstance(verdict, str):
+            lowered = verdict.strip().lower()
+            if lowered in {"true", "false"}:
+                normalized[name] = {
+                    "equivalent": lowered == "true",
+                    "reason": str(verdicts.get("reason", "")),
+                }
+    if not normalized and len(expected_variants) == 1:
+        expected = next(iter(expected_variants))
+        equivalent: bool | None = None
+        reason = ""
+        for raw_name, verdict in verdicts.items():
+            if str(raw_name).strip().lower() == "reason":
+                reason = str(verdict)
+            if isinstance(verdict, bool):
+                equivalent = verdict
+            elif isinstance(verdict, str) and verdict.strip().lower() in {"true", "false"}:
+                equivalent = verdict.strip().lower() == "true"
+            elif isinstance(raw_name, str) and raw_name.strip().lower() in {"true", "false"}:
+                equivalent = raw_name.strip().lower() == "true"
+                reason = str(verdict)
+        if equivalent is not None:
+            normalized[expected] = {"equivalent": equivalent, "reason": reason}
+    return normalized
+
+
+def run_claude_judge(prompt: str, *, model: str | None, timeout: float) -> dict:
     # --max-turns 1 keeps the headless agent from entering a tool-use loop and
     # forces a single direct answer. The session default model answers cleanly;
     # an explicit --model can be slower and more prone to agentic refusals.
@@ -100,10 +147,29 @@ def run_judge(prompt: str, *, model: str | None) -> dict:
     for attempt in range(4):
         if attempt:
             time.sleep(2 * attempt)
-        completed = subprocess.run(
-            command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            last_error = RuntimeError(f"judge timed out after {timeout:.0f}s")
+            continue
         if completed.returncode != 0:
+            try:
+                envelope = json.loads(completed.stdout)
+                status = envelope.get("api_error_status")
+                result = str(envelope.get("result", ""))[:200]
+                last_error = RuntimeError(
+                    f"claude exited {completed.returncode}: "
+                    f"api_error_status={status} result={result}"
+                )
+                continue
+            except (ValueError, TypeError):
+                pass
             last_error = RuntimeError(
                 f"claude exited {completed.returncode}: {completed.stderr[:200]}"
             )
@@ -122,6 +188,43 @@ def run_judge(prompt: str, *, model: str | None) -> dict:
     raise last_error if last_error else RuntimeError("judge failed")
 
 
+def run_ollama_judge(prompt: str, *, model: str, timeout: float) -> dict:
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0,
+                "num_predict": 1024,
+            },
+        }
+    ).encode()
+    request = urllib.request.Request(
+        "http://127.0.0.1:11434/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        document = json.loads(response.read())
+    if "response" not in document:
+        raise RuntimeError(f"ollama response missing text: {document}")
+    return extract_json(document["response"])
+
+
+def run_judge(
+    prompt: str, *, backend: str, model: str | None, timeout: float
+) -> dict:
+    if backend == "claude":
+        return run_claude_judge(prompt, model=model, timeout=timeout)
+    if backend == "ollama":
+        if not model:
+            raise RuntimeError("--judge-model is required for --judge-backend ollama")
+        return run_ollama_judge(prompt, model=model, timeout=timeout)
+    raise RuntimeError(f"unknown judge backend: {backend}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -137,9 +240,35 @@ def parse_args() -> argparse.Namespace:
         help="Optional model override for the judge; empty uses the session default.",
     )
     parser.add_argument(
+        "--judge-backend",
+        choices=["claude", "ollama"],
+        default="claude",
+        help="LLM judge backend. Ollama uses the local /api/generate endpoint.",
+    )
+    parser.add_argument(
         "--no-judge",
         action="store_true",
         help="Skip the LLM judge (compute only lexical + cosine metrics).",
+    )
+    parser.add_argument(
+        "--judge-timeout",
+        type=float,
+        default=180.0,
+        help="Per-prompt Claude judge timeout in seconds.",
+    )
+    parser.add_argument(
+        "--judge-batch-size",
+        type=int,
+        default=0,
+        help=(
+            "Maximum variants per judge call. 0 judges all variants for a prompt "
+            "in one call; use 1 for weaker local judges."
+        ),
+    )
+    parser.add_argument(
+        "--variants",
+        nargs="+",
+        help="Optional subset of non-source variants to compare.",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     return parser.parse_args()
@@ -154,6 +283,11 @@ def main() -> None:
     if source not in generations:
         raise RuntimeError(f"source variant '{source}' not in generations file")
     variants = [name for name in generations if name != source]
+    if args.variants is not None:
+        missing = sorted(set(args.variants) - set(variants))
+        if missing:
+            raise RuntimeError(f"requested variants missing from generations: {missing}")
+        variants = [name for name in variants if name in set(args.variants)]
 
     embedding_cache: dict[str, list[float]] = {}
 
@@ -172,6 +306,8 @@ def main() -> None:
         for item in items:
             instruction_by[(family, item["id"])] = item["prompt"]
 
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    per_row_path = args.output_dir / "qwen25_textual_comparison.csv"
     rows: list[dict[str, object]] = []
     for family in prompts:
         prompt_ids = [item["id"] for item in prompts[family]]
@@ -192,14 +328,27 @@ def main() -> None:
             }
             if not args.no_judge and differing:
                 try:
-                    verdicts = run_judge(
-                        judge_prompt(
-                            instruction=instruction_by[(family, prompt_id)],
-                            reference=reference,
-                            variants=differing,
-                        ),
-                        model=args.judge_model,
+                    print(
+                        f"{family}/{prompt_id}: judging {len(differing)} variants",
+                        flush=True,
                     )
+                    for batch in chunk_items(differing, args.judge_batch_size):
+                        batch_verdicts = run_judge(
+                            judge_prompt(
+                                instruction=instruction_by[(family, prompt_id)],
+                                reference=reference,
+                                variants=batch,
+                            ),
+                            backend=args.judge_backend,
+                            model=args.judge_model,
+                            timeout=args.judge_timeout,
+                        )
+                        verdicts.update(
+                            normalize_judge_verdicts(
+                                batch_verdicts,
+                                set(batch),
+                            )
+                        )
                 except (subprocess.SubprocessError, ValueError, KeyError, RuntimeError) as error:
                     print(f"  judge failed for {family}/{prompt_id}: {error}")
                     verdicts = {}
@@ -233,11 +382,10 @@ def main() -> None:
                         ),
                     }
                 )
+            pd.DataFrame(rows).to_csv(per_row_path, index=False)
             print(f"{family}/{prompt_id}: compared {len(present)} variants")
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(rows)
-    per_row_path = args.output_dir / "qwen25_textual_comparison.csv"
     frame.to_csv(per_row_path, index=False)
 
     summary_rows: list[dict[str, object]] = []
@@ -261,9 +409,35 @@ def main() -> None:
     summary = pd.DataFrame(summary_rows)
     summary_path = args.output_dir / "qwen25_textual_summary.csv"
     summary.to_csv(summary_path, index=False)
+    metadata = {
+        "generations_file": str(args.generations_file),
+        "source_variant": args.source_variant,
+        "variants": variants,
+        "embed_model": args.embed_model,
+        "judge_backend": args.judge_backend,
+        "judge_model": (
+            args.judge_model
+            if args.judge_model
+            else f"{args.judge_backend}_default"
+        ),
+        "judge_model_arg": args.judge_model,
+        "judge_timeout": args.judge_timeout,
+        "judge_batch_size": args.judge_batch_size,
+        "judge_enabled": not args.no_judge,
+        "output_dir": str(args.output_dir),
+        "row_count": len(frame),
+        "missing_judge_equivalent": (
+            int(frame["judge_equivalent"].isna().sum())
+            if "judge_equivalent" in frame
+            else None
+        ),
+    }
+    metadata_path = args.output_dir / "qwen25_textual_metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
     print(summary.to_string(index=False))
     print(f"Wrote {per_row_path}")
     print(f"Wrote {summary_path}")
+    print(f"Wrote {metadata_path}")
 
 
 if __name__ == "__main__":

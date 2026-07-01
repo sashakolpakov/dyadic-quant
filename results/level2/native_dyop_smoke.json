@@ -1,0 +1,29 @@
+{
+  "level": 2,
+  "bits": 6,
+  "max_bits": 8,
+  "group_size": 0,
+  "seed": 2026,
+  "repeats": 1,
+  "reload_packed": true,
+  "packed_artifact": "results/level2/native_dyop_smoke.dyadic.pt",
+  "materialization_ms": 0.2087499015033245,
+  "level1_forward_ms": 0.1307500060647726,
+  "level2_forward_ms": 17.30233384296298,
+  "max_abs_error_vs_level1_materialized": 2.9802322387695312e-08,
+  "replaced_modules": [
+    "embed",
+    "proj",
+    "conv",
+    "head"
+  ],
+  "shared_weight_modules": [],
+  "storage": {
+    "weight_payload_bytes": 363,
+    "exponent_bytes": 33,
+    "other_model_bytes": 32,
+    "total_model_bytes": 428,
+    "incremental_plane_bytes": 61
+  },
+  "note": "Level 2 scalar kernels are correctness kernels. They avoid decoded weight execution but are not expected to be faster than PyTorch."
+}

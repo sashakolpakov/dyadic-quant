@@ -1,0 +1,25 @@
+{
+  "generations_file": "/Users/sasha/dyadic-quant/results/qwen25_textual_global_rerun_haiku45/level1_materialized/qwen25_generations.json",
+  "source_variant": "bf16_source",
+  "variants": [
+    "dyadic_4",
+    "dyadic_5",
+    "dyadic_6",
+    "dyadic_8",
+    "q4_k_m",
+    "q6_k",
+    "q8_0",
+    "dyadic_g32_4",
+    "dyadic_g32_5",
+    "dyadic_g32_6",
+    "dyadic_g32_8"
+  ],
+  "embed_model": "nomic-embed-text",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "judge_model_arg": "claude-haiku-4-5-20251001",
+  "judge_timeout": 300.0,
+  "judge_enabled": true,
+  "output_dir": "/Users/sasha/dyadic-quant/results/qwen25_textual_global_rerun_haiku45/level1_materialized",
+  "row_count": 330,
+  "missing_judge_equivalent": 252
+}

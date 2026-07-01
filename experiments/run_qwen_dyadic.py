@@ -19,10 +19,16 @@ if str(REPOSITORY_ROOT) not in sys.path:
 
 from dyadic_quant.dyadic_torch import (
     encode_model,
+    load_encoded_model,
     materialize_prefix,
     save_encoded_model,
     storage_bytes,
 )
+from dyadic_quant.level2 import build_level2_model, build_native_cpu
+
+
+DEFAULT_OUTPUT_DIR = Path("results")
+LEVEL2_OUTPUT_DIR = Path("results/level2")
 
 
 def require_mps() -> torch.device:
@@ -31,16 +37,49 @@ def require_mps() -> torch.device:
     return torch.device("mps")
 
 
-def synchronize() -> None:
-    torch.mps.synchronize()
+def level2_uses_native_cpu(args: argparse.Namespace) -> bool:
+    return args.execution_backend == "level2-native" and (
+        args.level2_linear_backend == "native-cpu"
+        or args.level2_embedding_backend == "native-cpu"
+    )
 
 
-def warmup_model(model, token_ids: torch.Tensor, device: torch.device) -> None:
+def resolve_device(args: argparse.Namespace) -> torch.device:
+    if level2_uses_native_cpu(args):
+        return torch.device("cpu")
+    return require_mps()
+
+
+def resolve_model_dtype(args: argparse.Namespace) -> torch.dtype:
+    if level2_uses_native_cpu(args):
+        return torch.float32
+    if args.dtype == "bfloat16":
+        return torch.bfloat16
+    if args.dtype == "float16":
+        return torch.float16
+    return torch.float32
+
+
+def synchronize(device: torch.device) -> None:
+    if device.type == "mps":
+        torch.mps.synchronize()
+
+
+def empty_cache(device: torch.device) -> None:
+    if device.type == "mps":
+        torch.mps.empty_cache()
+
+
+def warmup_model(
+    model, token_ids: torch.Tensor, device: torch.device, *, repeats: int = 2
+) -> None:
+    if repeats <= 0:
+        return
     sample = token_ids[:64].unsqueeze(0).to(device)
     with torch.inference_mode():
-        model(input_ids=sample, use_cache=False)
-        model(input_ids=sample, use_cache=False)
-    synchronize()
+        for _ in range(repeats):
+            model(input_ids=sample, use_cache=False)
+    synchronize(device)
 
 
 def load_wikitext_tokens(
@@ -67,7 +106,7 @@ def evaluate_language_model(
     total_loss = 0.0
     total_tokens = 0
     predictions: list[torch.Tensor] = []
-    synchronize()
+    synchronize(device)
     start = perf_counter()
     with torch.inference_mode():
         for offset in range(0, len(token_ids) - 1, sequence_length):
@@ -85,7 +124,7 @@ def evaluate_language_model(
             total_loss += float(loss.item())
             total_tokens += targets.numel()
             predictions.append(logits.argmax(dim=-1).cpu())
-    synchronize()
+    synchronize(device)
     elapsed = perf_counter() - start
     predicted = torch.cat(predictions, dim=1).squeeze(0)
     mean_loss = total_loss / total_tokens
@@ -125,8 +164,10 @@ def score_arc(
     questions: list[dict[str, object]],
     device: torch.device,
 ) -> tuple[float, float]:
+    if not questions:
+        return 0.0, 0.0
     correct = 0
-    synchronize()
+    synchronize(device)
     start = perf_counter()
     with torch.inference_mode():
         for question in questions:
@@ -171,7 +212,7 @@ def score_arc(
                 question["answer_index"]
             ):
                 correct += 1
-    synchronize()
+    synchronize(device)
     return correct / len(questions), perf_counter() - start
 
 
@@ -183,10 +224,10 @@ def generation_speed(model, tokenizer, device: torch.device) -> dict[str, float]
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.inference_mode():
         model.generate(**inputs, max_new_tokens=8, do_sample=False)
-        synchronize()
+        synchronize(device)
         start = perf_counter()
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-        synchronize()
+        synchronize(device)
     elapsed = perf_counter() - start
     generated = output.shape[1] - inputs.input_ids.shape[1]
     return {
@@ -210,8 +251,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sequence-length", type=int, default=256)
     parser.add_argument("--arc-limit", type=int, default=100)
     parser.add_argument(
+        "--warmup-repeats",
+        type=int,
+        default=2,
+        help="Number of pre-evaluation forwards per model row; use 0 for slow native CPU metric runs.",
+    )
+    parser.add_argument(
+        "--skip-generation",
+        action="store_true",
+        help="Skip generation timing; useful for native CPU smoke validation.",
+    )
+    parser.add_argument(
         "--dtype",
-        choices=["bfloat16", "float16"],
+        choices=["bfloat16", "float16", "float32"],
         default="bfloat16",
         help="Common model evaluation dtype; BF16 matches the official source.",
     )
@@ -259,16 +311,58 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Serialize the packed maximum-depth nested dyadic code.",
     )
-    parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument(
+        "--load-dyadic",
+        type=Path,
+        help="Load an existing packed dyadic artifact instead of encoding weights.",
+    )
+    parser.add_argument(
+        "--execution-backend",
+        choices=["materialized", "level2-native"],
+        default="materialized",
+        help=(
+            "materialized decodes prefixes into model weights; level2-native "
+            "replaces encoded modules with native dyop execution modules."
+        ),
+    )
+    parser.add_argument(
+        "--level2-linear-backend",
+        choices=["scalar", "native-cpu"],
+        default="scalar",
+        help="Level 2 backend for Linear/GEMV/GEMM/output projection modules.",
+    )
+    parser.add_argument(
+        "--level2-embedding-backend",
+        choices=["scalar", "native-cpu"],
+        default="scalar",
+        help="Level 2 backend for embedding lookup modules.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help=(
+            "Result directory. Defaults to results/ for materialized runs and "
+            "results/level2/ for level2-native runs."
+        ),
+    )
     return parser.parse_args()
+
+
+def resolve_output_dir(args: argparse.Namespace) -> Path:
+    if args.output_dir is not None:
+        return args.output_dir
+    if args.execution_backend == "level2-native":
+        return LEVEL2_OUTPUT_DIR
+    return DEFAULT_OUTPUT_DIR
 
 
 def main() -> None:
     args = parse_args()
-    device = require_mps()
-    model_dtype = (
-        torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
-    )
+    args.output_dir = resolve_output_dir(args)
+    if level2_uses_native_cpu(args):
+        build_native_cpu()
+    device = resolve_device(args)
+    model_dtype = resolve_model_dtype(args)
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir, local_files_only=True)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
@@ -308,19 +402,24 @@ def main() -> None:
     )
     encoded = None
     if not args.reference_only:
-        encoded = encode_model(
-            model,
-            max_bits=max(args.bits),
-            optimize_prefix_bits=tuple(sorted(set(args.bits))),
-            exclude_names=exclude_names,
-            group_size=group_size,
+        encoded = (
+            load_encoded_model(args.load_dyadic)
+            if args.load_dyadic is not None
+            else encode_model(
+                model,
+                max_bits=max(args.bits),
+                optimize_prefix_bits=tuple(sorted(set(args.bits))),
+                exclude_names=exclude_names,
+                group_size=group_size,
+            )
         )
         if args.save_dyadic is not None:
             save_encoded_model(encoded, args.save_dyadic)
     rows = []
+    source_parameter_count = sum(p.numel() for p in model.parameters())
 
     model.to(device)
-    warmup_model(model, token_ids, device)
+    warmup_model(model, token_ids, device, repeats=args.warmup_repeats)
     reference_metrics, reference_predictions = evaluate_language_model(
         model,
         token_ids,
@@ -332,9 +431,14 @@ def main() -> None:
         args.save_reference_predictions.parent.mkdir(parents=True, exist_ok=True)
         torch.save(reference_predictions, args.save_reference_predictions)
     arc_accuracy, arc_elapsed = score_arc(model, tokenizer, questions, device)
-    reference_generation = generation_speed(model, tokenizer, device)
+    reference_generation = (
+        {"generated_tokens": 0, "generation_elapsed_s": 0.0, "generation_tokens_per_s": 0.0}
+        if args.skip_generation
+        else generation_speed(model, tokenizer, device)
+    )
+    dtype_bytes = 4 if model_dtype == torch.float32 else 2
     reference_bytes = sum(
-        tensor.numel() * 2
+        tensor.numel() * dtype_bytes
         for tensor in list(model.parameters()) + list(model.buffers())
     )
     rows.append(
@@ -342,11 +446,15 @@ def main() -> None:
             "method": (
                 "dequantized_gguf_reference"
                 if args.gguf_file is not None
-                else f"{args.dtype}_source_reference"
+                else f"{str(model_dtype).replace('torch.', '')}_source_reference"
             ),
+            "execution_backend": "transformers_source",
+            "level2_linear_backend": "",
+            "level2_embedding_backend": "",
             "bits_per_weight": 16,
             "conversion_ms": 0.0,
             "materialization_ms": 0.0,
+            "level2_build_ms": 0.0,
             "total_model_bytes": reference_bytes,
             "incremental_plane_bytes": 0,
             "arc_easy_accuracy": arc_accuracy,
@@ -356,42 +464,94 @@ def main() -> None:
         }
     )
     model.to("cpu")
-    torch.mps.empty_cache()
+    empty_cache(device)
 
     for bits in [] if args.reference_only else args.bits:
         assert encoded is not None
-        materialization_ms = materialize_prefix(
-            model, encoded, bits=bits, overrides=overrides
-        )
+        level2_build_ms = 0.0
+        level2_replaced_modules: tuple[str, ...] = ()
+        level2_shared_weight_modules: tuple[str, ...] = ()
+        if args.execution_backend == "materialized":
+            candidate = model
+            materialization_ms = materialize_prefix(
+                candidate, encoded, bits=bits, overrides=overrides
+            )
+        else:
+            start = perf_counter()
+            candidate, replacement = build_level2_model(
+                model,
+                encoded,
+                bits=bits,
+                overrides=overrides,
+                dtype=model_dtype,
+                linear_backend=args.level2_linear_backend,
+                embedding_backend=args.level2_embedding_backend,
+            )
+            level2_build_ms = (perf_counter() - start) * 1000
+            materialization_ms = 0.0
+            level2_replaced_modules = replacement.replaced_modules
+            level2_shared_weight_modules = replacement.shared_weight_modules
         sizes = storage_bytes(model, encoded, bits=bits, overrides=overrides)
-        model.to(device)
-        warmup_model(model, token_ids, device)
+        candidate.to(device)
+        warmup_model(candidate, token_ids, device, repeats=args.warmup_repeats)
         metrics, _ = evaluate_language_model(
-            model,
+            candidate,
             token_ids,
             device,
             sequence_length=args.sequence_length,
             reference_predictions=reference_predictions,
         )
-        arc_accuracy, arc_elapsed = score_arc(model, tokenizer, questions, device)
-        generation = generation_speed(model, tokenizer, device)
+        arc_accuracy, arc_elapsed = score_arc(candidate, tokenizer, questions, device)
+        generation = (
+            {
+                "generated_tokens": 0,
+                "generation_elapsed_s": 0.0,
+                "generation_tokens_per_s": 0.0,
+            }
+            if args.skip_generation
+            else generation_speed(candidate, tokenizer, device)
+        )
         rows.append(
             {
                 "method": (
-                    "per_channel_dyadic"
-                    if group_size is None
-                    else "block_dyadic"
+                    (
+                        "per_channel_dyadic"
+                        if group_size is None
+                        else "block_dyadic"
+                    )
+                    if args.execution_backend == "materialized"
+                    else (
+                        "per_channel_dyadic_level2_native"
+                        if group_size is None
+                        else "block_dyadic_level2_native"
+                    )
+                ),
+                "execution_backend": args.execution_backend,
+                "level2_linear_backend": (
+                    args.level2_linear_backend
+                    if args.execution_backend == "level2-native"
+                    else ""
+                ),
+                "level2_embedding_backend": (
+                    args.level2_embedding_backend
+                    if args.execution_backend == "level2-native"
+                    else ""
                 ),
                 "bits_per_weight": bits,
                 "group_size": args.group_size,
                 "embedding_bits": args.embedding_bits or bits,
                 "conversion_ms": encoded.conversion_ms,
                 "materialization_ms": materialization_ms,
+                "level2_build_ms": level2_build_ms,
+                "level2_replaced_modules": ",".join(level2_replaced_modules),
+                "level2_shared_weight_modules": ",".join(
+                    level2_shared_weight_modules
+                ),
                 "arc_easy_accuracy": arc_accuracy,
                 "arc_elapsed_s": arc_elapsed,
                 "effective_bits_per_weight": sizes["total_model_bytes"]
                 * 8
-                / sum(p.numel() for p in model.parameters()),
+                / source_parameter_count,
                 **sizes,
                 **metrics,
                 **generation,
@@ -402,8 +562,12 @@ def main() -> None:
             f"agreement={metrics['next_token_agreement']:.3f}, "
             f"ARC={arc_accuracy:.3f}"
         )
-        model.to("cpu")
-        torch.mps.empty_cache()
+        candidate.to("cpu")
+        if candidate is not model:
+            del candidate
+        else:
+            model.to("cpu")
+        empty_cache(device)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(rows)
@@ -428,10 +592,17 @@ def main() -> None:
             "save_dyadic": (
                 str(args.save_dyadic) if args.save_dyadic is not None else None
             ),
+            "load_dyadic": (
+                str(args.load_dyadic) if args.load_dyadic is not None else None
+            ),
         },
         "device": str(device),
         "torch": torch.__version__,
         "evaluation_dtype": args.dtype,
+        "resolved_model_dtype": str(model_dtype).replace("torch.", ""),
+        "execution_backend": args.execution_backend,
+        "level2_linear_backend": args.level2_linear_backend,
+        "level2_embedding_backend": args.level2_embedding_backend,
         "platform": platform.platform(),
         "quantized_weight_count": (
             encoded.quantized_weight_count if encoded is not None else 0
@@ -439,6 +610,11 @@ def main() -> None:
         "exponent_count": encoded.exponent_count if encoded is not None else 0,
         "excluded_modules": sorted(exclude_names),
         "reference_only": args.reference_only,
+        "storage_note": (
+            "For level2-native rows, storage is computed from the original "
+            "Level 1 encoded source model because decoded weight parameters "
+            "are intentionally absent from Level 2 dyop modules."
+        ),
         "reference_note": (
             f"The GGUF source is dequantized to {args.dtype} for Transformers/MPS "
             "evaluation before dyadic encoding."

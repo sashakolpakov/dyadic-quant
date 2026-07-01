@@ -1,0 +1,18 @@
+{
+  "generations_file": "/Users/sasha/dyadic-quant/results/qwen25_textual_global_rerun_haiku45/level2_native_dyop/qwen25_dyop_generations.json",
+  "source_variant": "bf16_source",
+  "variants": [
+    "dyop_native_4",
+    "dyop_native_5",
+    "dyop_native_6",
+    "dyop_native_8"
+  ],
+  "embed_model": "nomic-embed-text",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "judge_model_arg": "claude-haiku-4-5-20251001",
+  "judge_timeout": 300.0,
+  "judge_enabled": true,
+  "output_dir": "/Users/sasha/dyadic-quant/results/qwen25_textual_global_rerun_haiku45/level2_native_dyop",
+  "row_count": 120,
+  "missing_judge_equivalent": 120
+}

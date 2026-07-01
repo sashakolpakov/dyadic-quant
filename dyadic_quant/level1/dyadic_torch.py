@@ -110,6 +110,57 @@ def save_encoded_model(encoded: EncodedModel, path: Path) -> None:
     temporary.replace(path)
 
 
+def load_encoded_model(path: Path) -> EncodedModel:
+    """Load a packed maximum-depth dyadic code saved by ``save_encoded_model``."""
+    payload = torch.load(path, map_location="cpu", weights_only=True)
+    if payload.get("format") != "progressive_dyadic_sign_magnitude_v1":
+        raise ValueError(f"unsupported dyadic format: {payload.get('format')!r}")
+    max_bits = int(payload["max_bits"])
+    if max_bits < 2 or max_bits > 8:
+        raise ValueError("the packed dyadic artifact currently supports 2-8 bits")
+    sign_shift = max_bits - 1
+    magnitude_mask = (1 << sign_shift) - 1
+    modules: list[EncodedModule] = []
+    for raw in payload["modules"]:
+        packed = raw["packed_sign_magnitude"].to(torch.uint8)
+        shape = tuple(int(size) for size in raw["shape"])
+        if tuple(packed.shape) != shape:
+            raise ValueError(f"packed tensor shape mismatch for {raw['name']!r}")
+        sign_bit = torch.bitwise_right_shift(packed, sign_shift)
+        signs = torch.where(sign_bit > 0, -1, 1).to(torch.int8)
+        magnitude_code = torch.bitwise_and(packed, magnitude_mask).to(torch.int32)
+        if "group_size" in raw:
+            group_size = int(raw["group_size"])
+        else:
+            group_size = math.prod(shape[1:])
+        exponents = raw["exponents"].to(torch.int16)
+        if exponents.ndim == 1:
+            exponents = exponents.unsqueeze(1)
+        tensor = DyadicTensor(
+            signs=signs.reshape(shape),
+            magnitude_code=magnitude_code.reshape(shape),
+            exponents=exponents,
+            max_bits=max_bits,
+            group_size=group_size,
+        )
+        modules.append(
+            EncodedModule(
+                name=str(raw["name"]),
+                tensor=tensor,
+                weight_count=int(raw["weight_count"]),
+                output_channels=int(raw["output_channels"]),
+            )
+        )
+    return EncodedModel(
+        modules=modules,
+        max_bits=max_bits,
+        conversion_ms=0.0,
+        quantized_weight_count=int(payload["quantized_weight_count"]),
+        exponent_count=int(payload["exponent_count"]),
+        group_size=int(payload.get("group_size", 0)),
+    )
+
+
 def _blocks_for(elements: int, group_size: int | None) -> tuple[int, int]:
     """Return the effective group size and block count for a row of weights."""
     if group_size is None or group_size >= elements or group_size <= 0:

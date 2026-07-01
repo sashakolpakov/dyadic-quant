@@ -1,0 +1,176 @@
+{
+  "schema": "dyadic_quant.level2.primitives.v1",
+  "purpose": "Primitive operations below layer kernels. Layer kernels are folded into architecture-specific op-trees by composing these primitives; primitives must be benchmarked before they are trusted inside a full kernel.",
+  "source_research": [
+    {
+      "name": "Arm Compute Library",
+      "url": "https://github.com/ARM-software/ComputeLibrary",
+      "lesson": "Operator performance is selected from architecture-specific algorithm families and tuned kernels, not one generic layer loop."
+    },
+    {
+      "name": "gemmlowp",
+      "url": "https://github.com/google/gemmlowp",
+      "lesson": "Low-precision GEMM requires both an optimized kernel and companion packing code; architecture-specific optimized paths use intrinsics or assembly."
+    },
+    {
+      "name": "XNNPACK",
+      "url": "https://github.com/google/XNNPACK",
+      "lesson": "High-efficiency inference is organized around operator-specific microkernels selected for target architectures."
+    },
+    {
+      "name": "Arm ACLE Neon intrinsics",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "lesson": "Intrinsics expose SIMD instructions, but the useful abstraction is still packing plus fixed-shape microkernels."
+    }
+  ],
+  "dyadic_value_model": {
+    "packed_weight": "signed_odd:int16 plus scale:float32 per output/group",
+    "decode_rule": "decoded_weight = signed_odd * scale",
+    "kernel_rule": "Accumulate activation * signed_odd in registers, then apply scale and bias at the output-channel boundary."
+  },
+  "primitive_classes": [
+    {
+      "name": "pack_weight_k_nr",
+      "role": "Reorder dyadic weights into K-major, NR-lane order for a target microkernel.",
+      "inputs": ["signed_odd[OC,K]", "scales[OC,groups]"],
+      "outputs": ["signed_odd_packed[OC/NR,K,NR]", "scales_packed[OC/NR,NR,groups]"],
+      "required_for": ["linear_gemm", "conv2d_1x1", "conv2d_3x3"],
+      "architecture_notes": {
+        "arm64_neon": "NR must match vector lane strategy, usually 4 or 8 float lanes; avoid building lane vectors from row-strided loads inside the hot loop.",
+        "arm64_sme": "NR should map to tile columns; packing should feed SME tile loads when available.",
+        "x86_avx2": "NR should map to 8 float lanes or paired vectors.",
+        "x86_avx512": "NR should map to 16 float lanes or tile-AMX variants for integer paths."
+      }
+    },
+    {
+      "name": "pack_activation_mr_k",
+      "role": "Copy or alias MR activation rows into a contiguous K-major tile.",
+      "inputs": ["activation[M,K] or NCHW windows"],
+      "outputs": ["activation_tile[MR,K]"],
+      "required_for": ["linear_gemm", "conv2d_1x1", "conv2d_3x3"],
+      "architecture_notes": {
+        "arm64_neon": "MR must be large enough to reuse packed weights across rows but small enough to keep accumulators in vector registers.",
+        "all": "For GEMV, this primitive is skipped; row-dot is cheaper."
+      }
+    },
+    {
+      "name": "make_indirect_window_tile",
+      "role": "Create an MR tile of convolution windows without fully materializing im2col.",
+      "inputs": ["NCHW activation", "kernel shape", "stride", "padding", "dilation"],
+      "outputs": ["window_tile[MR,K] or pointer_tile[MR,K]"],
+      "required_for": ["conv2d_3x3_same", "conv2d_3x3_stride2"],
+      "architecture_notes": {
+        "arm64_neon": "Prefer contiguous interior windows and separate border kernels; avoid LD2/deinterleave-heavy direct loops unless benchmarked.",
+        "all": "This primitive is the conv equivalent of activation packing for GEMM."
+      }
+    },
+    {
+      "name": "dot_f32_i16",
+      "role": "Single-row dyadic dot primitive for GEMV and small tails.",
+      "inputs": ["activation[K]:float32", "signed_odd[K]:int16"],
+      "outputs": ["accumulator:float32"],
+      "required_for": ["linear_gemv", "embedding tails", "fallback tails inside native kernels"],
+      "architecture_notes": {
+        "arm64_neon": "Use vector int16 load, sign-extend, convert to float, FMLA, horizontal add.",
+        "all": "Only valid as a performance primitive when subkernel gate beats materialized row-dot."
+      }
+    },
+    {
+      "name": "microkernel_mr_nr_f32_i16",
+      "role": "Core dyop GEMM primitive: compute MR rows by NR output channels.",
+      "inputs": ["activation_tile[MR,K]:float32", "signed_odd_packed[block,K,NR]:int16"],
+      "outputs": ["accumulator[MR,NR]:float32"],
+      "required_for": ["linear_gemm", "conv2d_1x1", "conv2d_3x3"],
+      "architecture_notes": {
+        "arm64_neon": "Candidate shapes must be benchmarked, e.g. MR=2/4 and NR=4/8. Reuse activation scalar/vector across NR, and reuse packed weight lanes across MR.",
+        "arm64_sme": "Candidate should map MRxNR directly to SME tiles.",
+        "x86_avx2": "Use NR=8 or split into two 4-lane accumulators depending on conversion cost.",
+        "x86_avx512": "Use NR=16 and consider int16-to-float conversion throughput."
+      }
+    },
+    {
+      "name": "apply_scale_bias",
+      "role": "Apply dyadic scale and optional bias to accumulator tile.",
+      "inputs": ["accumulator[MR,NR]", "scale[NR]", "bias[NR]"],
+      "outputs": ["output_tile[MR,NR]:float32"],
+      "required_for": ["all weighted kernels"],
+      "architecture_notes": {
+        "all": "Fuse after accumulation at output-channel boundary; do not decode weights to float memory."
+      }
+    },
+    {
+      "name": "writeback_strided",
+      "role": "Store output tile to the layer output layout.",
+      "inputs": ["output_tile[MR,NR]", "layout descriptor"],
+      "outputs": ["output tensor"],
+      "required_for": ["linear_gemm", "conv2d_1x1", "conv2d_3x3"],
+      "architecture_notes": {
+        "all": "Linear can write contiguous rows; Conv2d NCHW usually needs plane-stride stores unless output layout changes."
+      }
+    },
+    {
+      "name": "elementwise_fused",
+      "role": "Native activation/pointwise primitive.",
+      "inputs": ["one or more contiguous tensors"],
+      "outputs": ["contiguous output tensor"],
+      "required_for": ["relu", "add", "add_relu"],
+      "architecture_notes": {
+        "arm64_neon": "Vectorize contiguous chunks; persistent worker overhead must be avoided for tiny tensors.",
+        "all": "Prefer fusing into producer/consumer op-tree when possible."
+      }
+    },
+    {
+      "name": "reduction_window",
+      "role": "Pooling/reduction primitive for maxpool and average-pool tails.",
+      "inputs": ["window descriptors"],
+      "outputs": ["reduced output"],
+      "required_for": ["maxpool2d", "adaptive_avgpool2d"],
+      "architecture_notes": {
+        "all": "Dedicated tiny-shape kernels are required when worker overhead dominates."
+      }
+    }
+  ],
+  "architecture_profiles": {
+    "arm64_neon": {
+      "status": "current local target",
+      "mandatory_primitives": [
+        "dot_f32_i16",
+        "pack_weight_k_nr",
+        "pack_activation_mr_k",
+        "microkernel_mr_nr_f32_i16",
+        "apply_scale_bias",
+        "writeback_strided"
+      ],
+      "current_implemented_primitives": [
+        "dot_f32_i16",
+        "apply_scale_bias folded into scalar kernels",
+        "writeback_strided folded into scalar kernels",
+        "elementwise_fused",
+        "reduction_window for maxpool"
+      ],
+      "missing_for_speed_supremacy": [
+        "pack_weight_k_nr",
+        "pack_activation_mr_k",
+        "make_indirect_window_tile",
+        "microkernel_mr_nr_f32_i16"
+      ]
+    },
+    "arm64_sme": {
+      "status": "future target",
+      "mandatory_primitives": [
+        "pack_weight_k_nr mapped to SME tile columns",
+        "pack_activation_mr_k mapped to SME tile rows",
+        "microkernel_mr_nr_f32_i16 or integer dyop variant using SME tile operations",
+        "apply_scale_bias"
+      ]
+    },
+    "x86_avx2": {
+      "status": "future target",
+      "mandatory_primitives": [
+        "AVX2 KxNR weight pack",
+        "AVX2 MRxNR microkernel",
+        "scale/bias/writeback"
+      ]
+    }
+  }
+}

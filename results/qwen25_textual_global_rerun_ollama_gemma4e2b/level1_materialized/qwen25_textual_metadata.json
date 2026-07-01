@@ -1,0 +1,28 @@
+{
+  "generations_file": "results/qwen25_textual_global_rerun_ollama_gemma4e2b/level1_materialized/qwen25_generations.json",
+  "source_variant": "bf16_source",
+  "variants": [
+    "dyadic_4",
+    "dyadic_5",
+    "dyadic_6",
+    "dyadic_8",
+    "q4_k_m",
+    "q6_k",
+    "q8_0",
+    "dyadic_g32_4",
+    "dyadic_g32_5",
+    "dyadic_g32_6",
+    "dyadic_g32_8"
+  ],
+  "embed_model": "nomic-embed-text",
+  "judge_backend": "ollama",
+  "judge_model": "gemma4:e2b",
+  "judge_model_arg": "gemma4:e2b",
+  "judge_timeout": 240.0,
+  "judge_batch_size": 1,
+  "judge_enabled": true,
+  "output_dir": "results/qwen25_textual_global_rerun_ollama_gemma4e2b/level1_materialized",
+  "row_count": 330,
+  "missing_judge_equivalent": 0,
+  "last_completed_by": "experiments/level2/complete_missing_judges.py"
+}

@@ -1,0 +1,24 @@
+{
+  "source_dir": "/Users/sasha/dyadic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct",
+  "data_dir": "/Users/sasha/dyadic-quant/data/llm_eval",
+  "output_root": "/Users/sasha/dyadic-quant/results/qwen25_textual_global_rerun_smoke",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "embed_model": "nomic-embed-text",
+  "control_lineage": "/Users/sasha/dyadic-quant/results/qwen25_control_lineage.json",
+  "load_dyadic": "/Users/sasha/dyadic-quant/data/checkpoints/Qwen2.5-0.5B-Instruct-progressive-dyadic-8bit.pt",
+  "level1_generations_file": "/Users/sasha/dyadic-quant/results/qwen25_generations.json",
+  "bits": [
+    6
+  ],
+  "level1_group_sizes": [
+    32
+  ],
+  "arc_count": 20,
+  "wikitext_count": 10,
+  "max_new_tokens": 1,
+  "max_tokens": 8192,
+  "dyop_cpu_threads": 16,
+  "judge_timeout": 300.0,
+  "repair_passes": 3,
+  "repair_timeout": 480.0
+}

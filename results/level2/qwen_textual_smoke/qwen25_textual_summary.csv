@@ -1,0 +1,3 @@
+family,variant,prompts,exact_match_rate,mean_edit_ratio,mean_token_jaccard,mean_cosine,judge_equivalent_rate,judged_prompts
+arc,dyop_native_4,1,0.0,0.42105263157894735,0.2222222222222222,0.8155979637838578,,0
+wikitext,dyop_native_4,1,0.0,0.32432432432432434,0.0,0.6822368753338681,,0

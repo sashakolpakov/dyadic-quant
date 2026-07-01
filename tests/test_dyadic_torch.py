@@ -128,3 +128,66 @@ def test_packed_artifact_contains_sign_and_maximum_depth_code(tmp_path):
         magnitude,
         encoded.modules[0].tensor.magnitude_code.to(torch.uint8),
     )
+
+
+def test_packed_artifact_load_round_trips_encoded_model(tmp_path):
+    from dyadic_quant.dyadic_torch import (
+        encode_model,
+        load_encoded_model,
+        save_encoded_model,
+    )
+
+    model = torch.nn.Sequential(
+        torch.nn.Embedding(9, 4),
+        torch.nn.Linear(4, 3),
+    )
+    encoded = encode_model(
+        model,
+        max_bits=8,
+        optimize_prefix_bits=(4, 6, 8),
+        group_size=2,
+    )
+    output = tmp_path / "model.dyadic.pt"
+    save_encoded_model(encoded, output)
+    loaded = load_encoded_model(output)
+
+    assert loaded.max_bits == encoded.max_bits
+    assert loaded.quantized_weight_count == encoded.quantized_weight_count
+    assert loaded.exponent_count == encoded.exponent_count
+    assert [item.name for item in loaded.modules] == [
+        item.name for item in encoded.modules
+    ]
+    for original, restored in zip(encoded.modules, loaded.modules, strict=True):
+        assert restored.weight_count == original.weight_count
+        assert restored.output_channels == original.output_channels
+        assert restored.tensor.group_size == original.tensor.group_size
+        torch.testing.assert_close(restored.tensor.decode(6), original.tensor.decode(6))
+
+
+def test_legacy_packed_artifact_without_group_size_loads_as_per_channel(tmp_path):
+    from dyadic_quant.dyadic_torch import (
+        encode_model,
+        load_encoded_model,
+        save_encoded_model,
+    )
+
+    model = torch.nn.Sequential(torch.nn.Linear(5, 3, bias=False))
+    encoded = encode_model(model, max_bits=8)
+    output = tmp_path / "legacy.dyadic.pt"
+    save_encoded_model(encoded, output)
+    payload = torch.load(output, map_location="cpu", weights_only=True)
+    del payload["group_size"]
+    for module in payload["modules"]:
+        del module["group_size"]
+        module["exponents"] = module["exponents"].squeeze(1)
+    torch.save(payload, output)
+
+    loaded = load_encoded_model(output)
+
+    assert loaded.group_size == 0
+    assert loaded.modules[0].tensor.group_size == 5
+    assert loaded.modules[0].tensor.exponents.ndim == 2
+    torch.testing.assert_close(
+        loaded.modules[0].tensor.decode(6),
+        encoded.modules[0].tensor.decode(6),
+    )

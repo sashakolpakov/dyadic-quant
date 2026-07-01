@@ -1,0 +1,21 @@
+{
+  "level": 2,
+  "variant_name": "native_dyop_prefix_sweep",
+  "bits": [
+    4,
+    6
+  ],
+  "max_bits": 8,
+  "group_size": 0,
+  "seed": 2026,
+  "repeats": 1,
+  "packed_artifact": "results/level2/native_dyop_prefix_sweep.dyadic.pt",
+  "result_path": "results/level2/native_dyop_prefix_sweep_results.csv",
+  "torch": "2.12.1",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "quantized_weight_count": 484,
+  "exponent_count": 33,
+  "mean_level2_load_ms": 0.7230624323710799,
+  "all_prefixes_match_level1_materialized": true,
+  "note": "Each Level 2 prefix row reloads the packed dyadic artifact and executes encoded weights through native dyop modules. Level 1 materialization is used only as the comparison baseline."
+}

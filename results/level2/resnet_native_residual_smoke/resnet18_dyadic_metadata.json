@@ -1,0 +1,54 @@
+{
+  "arguments": {
+    "data_root": "data/datasets/imagenette2-160",
+    "checkpoint": "data/checkpoints/resnet18-f37072fd.pth",
+    "bits": [
+      6
+    ],
+    "batch_size": 1,
+    "workers": 0,
+    "limit": null,
+    "per_class_limit": 1,
+    "latency_repeats": 1,
+    "quantize_endpoints": false,
+    "load_dyadic": null,
+    "execution_backend": "level2-native",
+    "level2_linear_backend": "native-cpu",
+    "level2_conv_backend": "native-cpu",
+    "level2_spatial_backend": "native-cpu",
+    "output_dir": "results/level2/resnet_native_residual_smoke"
+  },
+  "model": "torchvision ResNet18_Weights.DEFAULT",
+  "torch": "2.12.1",
+  "device": "cpu",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "quantized_weight_count": 11157504,
+  "exponent_count": 4736,
+  "exponent_selection": "normalized_regret",
+  "optimized_prefix_bits": [
+    6
+  ],
+  "reference_dtype": "float32",
+  "reference_graph": "Conv-BatchNorm fused before FP16 cast",
+  "encoding_source_dtype": "float32",
+  "execution_backend": "level2-native",
+  "level2_linear_backend": "native-cpu",
+  "level2_conv_backend": "native-cpu",
+  "level2_spatial_backend": "native-cpu",
+  "native_residual_note": "When level2_spatial_backend is native-cpu, torchvision BasicBlock instances are wrapped so the residual add plus final ReLU executes through native_add_relu_cpu instead of Torch tensor addition.",
+  "storage_note": "Estimated packed format. For level2-native rows, storage is computed from the original Level 1 encoded source model because decoded weight parameters are intentionally absent from Level 2 dyop modules.",
+  "throughput_note": "Whole-dataset images_per_s includes loader and first-run MPS startup and is not a cross-row speed comparison. Use warmed latency_batch*_ms for the FP16-materialized path.",
+  "dataset_size": 10,
+  "class_sample_counts": {
+    "n01440764": 1,
+    "n02102040": 1,
+    "n02979186": 1,
+    "n03000684": 1,
+    "n03028079": 1,
+    "n03394916": 1,
+    "n03417042": 1,
+    "n03425413": 1,
+    "n03445777": 1,
+    "n03888257": 1
+  }
+}
