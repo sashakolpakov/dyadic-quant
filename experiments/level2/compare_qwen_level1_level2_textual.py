@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--level1-generations",
         type=Path,
-        default=Path("results/qwen25_generations.json"),
+        default=Path("results/level1/qwen25_generations.json"),
     )
     parser.add_argument(
         "--level2-generations",
@@ -27,17 +27,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--level1-summary",
         type=Path,
-        default=Path("results/qwen25_textual_summary.csv"),
+        default=Path("results/level1/qwen25_textual_summary.csv"),
     )
     parser.add_argument(
         "--level1-comparison",
         type=Path,
-        default=Path("results/qwen25_textual_comparison.csv"),
+        default=Path("results/level1/qwen25_textual_comparison.csv"),
     )
     parser.add_argument(
         "--level1-metadata",
         type=Path,
-        default=Path("results/qwen25_textual_metadata.json"),
+        default=Path("results/level1/qwen25_textual_metadata.json"),
     )
     parser.add_argument(
         "--level2-summary",

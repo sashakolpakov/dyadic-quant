@@ -8,9 +8,6 @@ continuations), and merges them into a shared generations JSON keyed by variant.
 
 The semantic comparison (embedding cosine + LLM judge) is performed afterward by
 ``compare_generations.py`` against the recorded BF16 source variant.
-
-MPS is mandatory; CPU execution is disabled, matching the other large-model
-scripts.
 """
 
 from __future__ import annotations
@@ -34,7 +31,7 @@ from dyadic_quant.level1.textgen import (
     generate_texts,
     merge_generations,
 )
-from experiments.level1.run_qwen_dyadic import load_wikitext_tokens, require_mps
+from experiments.level1.run_qwen_dyadic import load_wikitext_tokens, require_accelerator
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,14 +94,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--generations-file",
         type=Path,
-        default=Path("results/qwen25_generations.json"),
+        default=Path("results/level1/qwen25_generations.json"),
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    device = require_mps()
+    device = require_accelerator()
     model_dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir, local_files_only=True)
@@ -193,7 +190,10 @@ def main() -> None:
             print(f"Generated '{variant}'")
 
     model.to("cpu")
-    torch.mps.empty_cache()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "mps":
+        torch.mps.empty_cache()
     print(f"Wrote {args.generations_file}")
 
 

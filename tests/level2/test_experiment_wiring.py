@@ -33,8 +33,8 @@ def test_level2_native_runs_default_to_level2_results_dir():
 def test_materialized_runs_default_to_level1_results_dir():
     args = Namespace(execution_backend="materialized", output_dir=None)
 
-    assert resolve_resnet_output_dir(args) == Path("results")
-    assert resolve_qwen_output_dir(args) == Path("results")
+    assert resolve_resnet_output_dir(args) == Path("results/level1")
+    assert resolve_qwen_output_dir(args) == Path("results/level1")
 
 
 def test_explicit_output_dir_overrides_backend_defaults():

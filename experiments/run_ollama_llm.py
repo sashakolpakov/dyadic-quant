@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
         default="ollama_qwen05b",
         help="Safe filename prefix for CSV and summary output.",
     )
-    parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/level1"))
     return parser.parse_args()
 
 

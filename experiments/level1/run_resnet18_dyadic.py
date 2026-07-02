@@ -36,7 +36,7 @@ from dyadic_quant.level2 import (
 from experiments.level2.common import require_speed_gates
 
 
-DEFAULT_OUTPUT_DIR = Path("results")
+DEFAULT_OUTPUT_DIR = Path("results/level1")
 LEVEL2_OUTPUT_DIR = Path("results/level2")
 
 
@@ -54,12 +54,12 @@ IMAGENETTE_TARGETS = {
 }
 
 
-def require_mps() -> torch.device:
-    if not torch.backends.mps.is_built():
-        raise RuntimeError("PyTorch was not built with MPS support")
-    if not torch.backends.mps.is_available():
-        raise RuntimeError("MPS is unavailable; CPU execution is disabled")
-    return torch.device("mps")
+def require_accelerator() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    raise RuntimeError("CUDA or MPS is required for materialized execution")
 
 
 def fuse_resnet_batch_norm(model: torch.nn.Module) -> torch.nn.Module:
@@ -132,7 +132,7 @@ def level2_uses_native_cpu(args: argparse.Namespace) -> bool:
 def resolve_device(args: argparse.Namespace) -> torch.device:
     if level2_uses_native_cpu(args):
         return torch.device("cpu")
-    return require_mps()
+    return require_accelerator()
 
 
 def resolve_eval_dtype(args: argparse.Namespace) -> torch.dtype:
@@ -140,12 +140,16 @@ def resolve_eval_dtype(args: argparse.Namespace) -> torch.dtype:
 
 
 def synchronize(device: torch.device) -> None:
-    if device.type == "mps":
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    elif device.type == "mps":
         torch.mps.synchronize()
 
 
 def empty_cache(device: torch.device) -> None:
-    if device.type == "mps":
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "mps":
         torch.mps.empty_cache()
 
 
@@ -156,7 +160,7 @@ def evaluate(
     *,
     reference_logits: list[torch.Tensor] | None,
     dtype: torch.dtype,
-) -> tuple[dict[str, float], list[torch.Tensor]]:
+) -> tuple[dict[str, float], list[torch.Tensor], list[dict[str, float | int | str]]]:
     correct = 0
     total = 0
     agreement = 0
@@ -164,33 +168,103 @@ def evaluate(
     cosine_sum = 0.0
     output_values = 0
     logits_out: list[torch.Tensor] = []
+    per_class: dict[str, dict[str, float | int]] = {
+        class_name: {
+            "images": 0,
+            "correct": 0,
+            "agreement": 0,
+            "absolute_error": 0.0,
+            "output_values": 0,
+            "cosine_sum": 0.0,
+        }
+        for class_name in loader.dataset.classes
+    }
     synchronize(device)
     start = perf_counter()
     with torch.inference_mode():
         for batch_index, (images, targets) in enumerate(loader):
-            images = images.to(device=device, dtype=dtype)
-            target_indices = torch.tensor(
-                [IMAGENETTE_TARGETS[loader.dataset.classes[index]] for index in targets],
-                device=device,
+            class_indices = [int(index) for index in targets]
+            target_indices_cpu = torch.tensor(
+                [
+                    IMAGENETTE_TARGETS[loader.dataset.classes[index]]
+                    for index in class_indices
+                ]
             )
+            images = images.to(device=device, dtype=dtype)
+            target_indices = target_indices_cpu.to(device)
             logits = model(images)
             predictions = logits.argmax(dim=1)
             correct += int((predictions == target_indices).sum().item())
             total += images.shape[0]
             cpu_logits = logits.float().cpu()
+            cpu_predictions = predictions.cpu()
             logits_out.append(cpu_logits)
+            reference_prediction = None
+            sample_absolute_error = None
+            sample_cosine = None
             if reference_logits is not None:
                 reference = reference_logits[batch_index]
+                reference_prediction = reference.argmax(dim=1)
                 agreement += int(
-                    (cpu_logits.argmax(dim=1) == reference.argmax(dim=1)).sum().item()
+                    (cpu_predictions == reference_prediction).sum().item()
                 )
                 absolute_error += float(torch.abs(cpu_logits - reference).sum().item())
-                cosine_sum += float(
-                    F.cosine_similarity(cpu_logits, reference, dim=1).sum().item()
-                )
+                sample_absolute_error = torch.abs(cpu_logits - reference).sum(dim=1)
+                sample_cosine = F.cosine_similarity(cpu_logits, reference, dim=1)
+                cosine_sum += float(sample_cosine.sum().item())
                 output_values += cpu_logits.numel()
+            for sample_index, class_index in enumerate(class_indices):
+                class_name = loader.dataset.classes[class_index]
+                stats = per_class[class_name]
+                stats["images"] = int(stats["images"]) + 1
+                stats["correct"] = int(stats["correct"]) + int(
+                    cpu_predictions[sample_index].item()
+                    == target_indices_cpu[sample_index].item()
+                )
+                if reference_prediction is not None:
+                    stats["agreement"] = int(stats["agreement"]) + int(
+                        cpu_predictions[sample_index].item()
+                        == reference_prediction[sample_index].item()
+                    )
+                    stats["absolute_error"] = float(stats["absolute_error"]) + float(
+                        sample_absolute_error[sample_index].item()
+                    )
+                    stats["output_values"] = int(stats["output_values"]) + int(
+                        cpu_logits.shape[1]
+                    )
+                    stats["cosine_sum"] = float(stats["cosine_sum"]) + float(
+                        sample_cosine[sample_index].item()
+                    )
     synchronize(device)
     elapsed = perf_counter() - start
+    class_rows: list[dict[str, float | int | str]] = []
+    for class_name, stats in per_class.items():
+        images = int(stats["images"])
+        class_rows.append(
+            {
+                "class_name": class_name,
+                "imagenet_class_index": IMAGENETTE_TARGETS[class_name],
+                "images": images,
+                "top1_accuracy": (
+                    int(stats["correct"]) / images if images else 0.0
+                ),
+                "reference_agreement": (
+                    int(stats["agreement"]) / images
+                    if reference_logits is not None and images
+                    else 1.0
+                ),
+                "logit_mae": (
+                    float(stats["absolute_error"]) / int(stats["output_values"])
+                    if int(stats["output_values"])
+                    else 0.0
+                ),
+                "logit_cosine": (
+                    float(stats["cosine_sum"]) / images
+                    if reference_logits is not None and images
+                    else 1.0
+                ),
+            }
+        )
     return (
         {
             "top1_accuracy": correct / total,
@@ -202,6 +276,7 @@ def evaluate(
             "images_per_s": total / elapsed,
         },
         logits_out,
+        class_rows,
     )
 
 
@@ -300,6 +375,14 @@ def parse_args() -> argparse.Namespace:
         default=Path("results/level2/subkernel_speed_gates_arm64_neon_latest.csv"),
         help="CSV proving required ResNet native dyop kernels beat materialized gates.",
     )
+    parser.add_argument(
+        "--skip-speed-gate-check",
+        action="store_true",
+        help=(
+            "Run Level 2 native quality metrics even when speed gates are "
+            "incomplete or failing. The output metadata records this."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -346,7 +429,7 @@ def main() -> None:
             "native-cpu" if args.execution_backend == "level2-native" else "torch"
         )
     args.output_dir = resolve_output_dir(args)
-    if args.execution_backend == "level2-native":
+    if args.execution_backend == "level2-native" and not args.skip_speed_gate_check:
         require_speed_gates(args.level2_speed_gates, "resnet")
     if level2_uses_native_cpu(args):
         build_native_cpu()
@@ -411,8 +494,9 @@ def main() -> None:
     )
 
     rows: list[dict[str, object]] = []
+    class_rows: list[dict[str, object]] = []
     reference_model = copy.deepcopy(base_model).to(device=device, dtype=eval_dtype)
-    reference_metrics, reference_logits = evaluate(
+    reference_metrics, reference_logits, reference_class_rows = evaluate(
         reference_model, loader, device, reference_logits=None, dtype=eval_dtype
     )
     reference_latency_1 = latency(
@@ -459,6 +543,21 @@ def main() -> None:
             **reference_metrics,
         }
     )
+    for class_row in reference_class_rows:
+        class_rows.append(
+            {
+                "method": (
+                    "fp32_reference"
+                    if eval_dtype == torch.float32
+                    else "fp16_reference"
+                ),
+                "execution_backend": (
+                    "torch_fp32" if eval_dtype == torch.float32 else "torch_fp16"
+                ),
+                "bits_per_weight": 16,
+                **class_row,
+            }
+        )
     del reference_model
     empty_cache(device)
 
@@ -491,7 +590,7 @@ def main() -> None:
                 )
         sizes = storage_bytes(base_model, encoded, bits=bits)
         candidate = candidate.to(device=device, dtype=eval_dtype).eval()
-        metrics, _ = evaluate(
+        metrics, _, candidate_class_rows = evaluate(
             candidate,
             loader,
             device,
@@ -556,6 +655,34 @@ def main() -> None:
                 **metrics,
             }
         )
+        for class_row in candidate_class_rows:
+            class_rows.append(
+                {
+                    "method": (
+                        "per_channel_dyadic"
+                        if args.execution_backend == "materialized"
+                        else "per_channel_dyadic_level2_native"
+                    ),
+                    "execution_backend": args.execution_backend,
+                    "level2_linear_backend": (
+                        args.level2_linear_backend
+                        if args.execution_backend == "level2-native"
+                        else ""
+                    ),
+                    "level2_conv_backend": (
+                        args.level2_conv_backend
+                        if args.execution_backend == "level2-native"
+                        else ""
+                    ),
+                    "level2_spatial_backend": (
+                        args.level2_spatial_backend
+                        if args.execution_backend == "level2-native"
+                        else ""
+                    ),
+                    "bits_per_weight": bits,
+                    **class_row,
+                }
+            )
         print(
             f"{bits}-bit: accuracy={metrics['top1_accuracy']:.4f}, "
             f"agreement={metrics['reference_agreement']:.4f}, "
@@ -568,12 +695,15 @@ def main() -> None:
     frame = pd.DataFrame(rows)
     result_path = args.output_dir / "resnet18_dyadic_results.csv"
     frame.to_csv(result_path, index=False)
+    class_result_path = args.output_dir / "resnet18_dyadic_per_class.csv"
+    pd.DataFrame(class_rows).to_csv(class_result_path, index=False)
     metadata = {
         "arguments": vars(args) | {
             "data_root": str(args.data_root),
             "checkpoint": str(args.checkpoint),
             "output_dir": str(args.output_dir),
             "load_dyadic": str(args.load_dyadic) if args.load_dyadic else None,
+            "level2_speed_gates": str(args.level2_speed_gates),
         },
         "model": "torchvision ResNet18_Weights.DEFAULT",
         "torch": torch.__version__,
@@ -590,6 +720,8 @@ def main() -> None:
         "level2_linear_backend": args.level2_linear_backend,
         "level2_conv_backend": args.level2_conv_backend,
         "level2_spatial_backend": args.level2_spatial_backend,
+        "speed_gate_check_skipped": bool(args.skip_speed_gate_check),
+        "level2_speed_gates": str(args.level2_speed_gates),
         "native_residual_note": (
             "When level2_spatial_backend is native-cpu, torchvision BasicBlock "
             "instances are wrapped so the residual add plus final ReLU executes "
@@ -602,7 +734,7 @@ def main() -> None:
             "dyop modules."
         ),
         "throughput_note": (
-            "Whole-dataset images_per_s includes loader and first-run MPS "
+            "Whole-dataset images_per_s includes loader and accelerator "
             "startup and is not a cross-row speed comparison. Use warmed "
             "latency_batch*_ms for the FP16-materialized path."
         ),
@@ -614,6 +746,7 @@ def main() -> None:
     )
     print(frame.to_string(index=False))
     print(f"Wrote {result_path}")
+    print(f"Wrote {class_result_path}")
 
 
 if __name__ == "__main__":

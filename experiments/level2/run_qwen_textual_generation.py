@@ -82,6 +82,14 @@ def parse_args() -> argparse.Namespace:
         default=Path("results/level2/subkernel_speed_gates_arm64_neon_latest.csv"),
         help="CSV proving required Qwen native dyop kernels beat materialized gates.",
     )
+    parser.add_argument(
+        "--skip-speed-gate-check",
+        action="store_true",
+        help=(
+            "Generate native dyop text even when speed gates are incomplete or "
+            "failing. Use this for quality-only evidence."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -107,7 +115,8 @@ def generate_all(
 
 def main() -> None:
     args = parse_args()
-    require_speed_gates(args.speed_gates, "qwen")
+    if not args.skip_speed_gate_check:
+        require_speed_gates(args.speed_gates, "qwen")
     if args.linear_backend == "native-cpu" or args.embedding_backend == "native-cpu":
         build_native_cpu()
 
@@ -184,7 +193,6 @@ def main() -> None:
             dtype=torch.float32,
             linear_backend=args.linear_backend,
             embedding_backend=args.embedding_backend,
-            copy_model=True,
         )
         candidate.eval().to(device)
         variant = f"{args.dyop_prefix}_{bits}"

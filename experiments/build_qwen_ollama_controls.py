@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--template-model", default="qwen2.5:0.5b")
     parser.add_argument("--model-prefix", default="qwen25-source")
-    parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/level1"))
     return parser.parse_args()
 
 

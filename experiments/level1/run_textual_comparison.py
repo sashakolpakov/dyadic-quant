@@ -2,7 +2,7 @@
 
 Generates greedy text from the BF16 source, the per-channel dyadic prefixes
 (4/5/6/8-bit), and each dequantized GGUF control (Q4_K_M, Q6_K, Q8_0) using one
-common backend (Transformers/MPS), so the comparison isolates the effect of the
+common Transformers backend, so the comparison isolates the effect of the
 *weights* rather than the execution backend. It then scores every variant's text
 against the BF16 source with lexical, embedding-cosine, and LLM-judge metrics.
 """
@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/level1"))
     parser.add_argument("--arc-count", type=int, default=20)
     parser.add_argument("--wikitext-count", type=int, default=10)
     parser.add_argument("--max-new-tokens", type=int, default=128)

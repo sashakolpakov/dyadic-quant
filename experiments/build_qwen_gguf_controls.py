@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--llama-cpp-dir", type=Path, required=True)
     parser.add_argument("--template-model", default="qwen2.5:0.5b")
     parser.add_argument("--model-prefix", default="qwen25-original")
-    parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/level1"))
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--skip-ollama", action="store_true")
     return parser.parse_args()

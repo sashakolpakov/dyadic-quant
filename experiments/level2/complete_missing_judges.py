@@ -170,7 +170,7 @@ def generation_candidates(report: Path, args: argparse.Namespace, metadata: dict
             report.parent / "qwen25_dyop_generations.json",
             Path("results/level2/qwen25_dyop_generations.json"),
             Path("results/level2/qwen25_dyop_generation_smoke.json"),
-            Path("results/qwen25_generations.json"),
+            Path("results/level1/qwen25_generations.json"),
         ]
     )
     unique: list[Path] = []

@@ -28,14 +28,16 @@ from dyadic_quant.level2 import build_level2_model, build_native_cpu
 from experiments.level2.common import require_speed_gates
 
 
-DEFAULT_OUTPUT_DIR = Path("results")
+DEFAULT_OUTPUT_DIR = Path("results/level1")
 LEVEL2_OUTPUT_DIR = Path("results/level2")
 
 
-def require_mps() -> torch.device:
-    if not torch.backends.mps.is_available():
-        raise RuntimeError("MPS is unavailable; CPU execution is disabled")
-    return torch.device("mps")
+def require_accelerator() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    raise RuntimeError("CUDA or MPS is required for materialized execution")
 
 
 def level2_uses_native_cpu(args: argparse.Namespace) -> bool:
@@ -48,7 +50,7 @@ def level2_uses_native_cpu(args: argparse.Namespace) -> bool:
 def resolve_device(args: argparse.Namespace) -> torch.device:
     if level2_uses_native_cpu(args):
         return torch.device("cpu")
-    return require_mps()
+    return require_accelerator()
 
 
 def resolve_model_dtype(args: argparse.Namespace) -> torch.dtype:
@@ -62,12 +64,16 @@ def resolve_model_dtype(args: argparse.Namespace) -> torch.dtype:
 
 
 def synchronize(device: torch.device) -> None:
-    if device.type == "mps":
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    elif device.type == "mps":
         torch.mps.synchronize()
 
 
 def empty_cache(device: torch.device) -> None:
-    if device.type == "mps":
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "mps":
         torch.mps.empty_cache()
 
 
@@ -352,6 +358,14 @@ def parse_args() -> argparse.Namespace:
         default=Path("results/level2/subkernel_speed_gates_arm64_neon_latest.csv"),
         help="CSV proving required Qwen native dyop kernels beat materialized gates.",
     )
+    parser.add_argument(
+        "--skip-speed-gate-check",
+        action="store_true",
+        help=(
+            "Run Level 2 native quality metrics even when speed gates are "
+            "incomplete or failing. The output metadata records this."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -366,7 +380,7 @@ def resolve_output_dir(args: argparse.Namespace) -> Path:
 def main() -> None:
     args = parse_args()
     args.output_dir = resolve_output_dir(args)
-    if args.execution_backend == "level2-native":
+    if args.execution_backend == "level2-native" and not args.skip_speed_gate_check:
         require_speed_gates(args.level2_speed_gates, "qwen")
     if level2_uses_native_cpu(args):
         build_native_cpu()
@@ -604,6 +618,7 @@ def main() -> None:
             "load_dyadic": (
                 str(args.load_dyadic) if args.load_dyadic is not None else None
             ),
+            "level2_speed_gates": str(args.level2_speed_gates),
         },
         "device": str(device),
         "torch": torch.__version__,
@@ -612,6 +627,8 @@ def main() -> None:
         "execution_backend": args.execution_backend,
         "level2_linear_backend": args.level2_linear_backend,
         "level2_embedding_backend": args.level2_embedding_backend,
+        "speed_gate_check_skipped": bool(args.skip_speed_gate_check),
+        "level2_speed_gates": str(args.level2_speed_gates),
         "platform": platform.platform(),
         "quantized_weight_count": (
             encoded.quantized_weight_count if encoded is not None else 0
@@ -625,7 +642,7 @@ def main() -> None:
             "are intentionally absent from Level 2 dyop modules."
         ),
         "reference_note": (
-            f"The GGUF source is dequantized to {args.dtype} for Transformers/MPS "
+            f"The GGUF source is dequantized to {args.dtype} for Transformers "
             "evaluation before dyadic encoding."
             if args.gguf_file is not None
             else f"The source checkpoint is evaluated directly in {args.dtype}."

@@ -7,11 +7,16 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <mutex>
 #include <new>
 #include <thread>
 #include <vector>
+
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
 #include <arm_neon.h>
@@ -191,11 +196,13 @@ static void parallel_for_threads(int64_t begin, int64_t end, int threads, Fn fn)
 struct PackedDyopWeight {
     at::Tensor codes;   // int16 [out, K], signed odd prefix code
     at::Tensor codes_knr;  // int16 [ceil(out/8), K, 8]
+    at::Tensor codes_knr16;  // int16 [ceil(out/16), K, 16]
     at::Tensor codes_i8_knr;  // int8 [ceil(out/8), K, 8] when the prefix fits
     at::Tensor codes_f32_knr;  // float32 [ceil(out/8), K, 8]
     at::Tensor codes_f32_knr16;  // float32 [ceil(out/16), K, 16]
     at::Tensor scales;  // float32 [out, blocks], dyadic step / 2 per group
     at::Tensor scales_padded;  // float32 [ceil(out/8)*8, blocks]
+    at::Tensor scales_padded16;  // float32 [ceil(out/16)*16, blocks]
     std::vector<int64_t> shape;
     int64_t out = 0;
     int64_t out_padded = 0;
@@ -210,6 +217,9 @@ static PackedDyopWeight unpack_weight(const py::dict& packed) {
     if (packed.contains("codes_knr")) {
         w.codes_knr = packed["codes_knr"].cast<at::Tensor>().contiguous();
     }
+    if (packed.contains("codes_knr16")) {
+        w.codes_knr16 = packed["codes_knr16"].cast<at::Tensor>().contiguous();
+    }
     if (packed.contains("codes_i8_knr")) {
         w.codes_i8_knr = packed["codes_i8_knr"].cast<at::Tensor>().contiguous();
     }
@@ -222,6 +232,9 @@ static PackedDyopWeight unpack_weight(const py::dict& packed) {
     w.scales = packed["scales"].cast<at::Tensor>().contiguous();
     if (packed.contains("scales_padded")) {
         w.scales_padded = packed["scales_padded"].cast<at::Tensor>().contiguous();
+    }
+    if (packed.contains("scales_padded16")) {
+        w.scales_padded16 = packed["scales_padded16"].cast<at::Tensor>().contiguous();
     }
     w.shape = packed["shape"].cast<std::vector<int64_t>>();
     w.group_size = packed["group_size"].cast<int64_t>();
@@ -882,6 +895,314 @@ static bool linear_gemm_amx(
 
 #endif
 
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+static inline __m512 load_i16_as_f32_16_x86(const int16_t* p) {
+    __m256i v16 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p));
+    __m512i v32 = _mm512_cvtepi16_epi32(v16);
+    return _mm512_cvtepi32_ps(v32);
+}
+
+static inline void linear_microkernel_4x16_x86(
+    const float* input,
+    int64_t input_stride,
+    const int16_t* weight_block,
+    const float* scales,
+    const float* bias,
+    float* output,
+    int64_t output_stride,
+    int64_t k_size,
+    int valid_m,
+    int valid_n
+) {
+    __m512 acc0 = _mm512_setzero_ps();
+    __m512 acc1 = _mm512_setzero_ps();
+    __m512 acc2 = _mm512_setzero_ps();
+    __m512 acc3 = _mm512_setzero_ps();
+
+    const float* a0 = input;
+    const float* a1 = input + input_stride;
+    const float* a2 = input + 2 * input_stride;
+    const float* a3 = input + 3 * input_stride;
+
+    int64_t k = 0;
+    for (; k + 3 < k_size; k += 4) {
+        __m512 w0 = load_i16_as_f32_16_x86(weight_block + (k + 0) * 16);
+        __m512 w1 = load_i16_as_f32_16_x86(weight_block + (k + 1) * 16);
+        __m512 w2 = load_i16_as_f32_16_x86(weight_block + (k + 2) * 16);
+        __m512 w3 = load_i16_as_f32_16_x86(weight_block + (k + 3) * 16);
+
+        if (valid_m > 0) {
+            acc0 = _mm512_fmadd_ps(_mm512_set1_ps(a0[k + 0]), w0, acc0);
+            acc0 = _mm512_fmadd_ps(_mm512_set1_ps(a0[k + 1]), w1, acc0);
+            acc0 = _mm512_fmadd_ps(_mm512_set1_ps(a0[k + 2]), w2, acc0);
+            acc0 = _mm512_fmadd_ps(_mm512_set1_ps(a0[k + 3]), w3, acc0);
+        }
+        if (valid_m > 1) {
+            acc1 = _mm512_fmadd_ps(_mm512_set1_ps(a1[k + 0]), w0, acc1);
+            acc1 = _mm512_fmadd_ps(_mm512_set1_ps(a1[k + 1]), w1, acc1);
+            acc1 = _mm512_fmadd_ps(_mm512_set1_ps(a1[k + 2]), w2, acc1);
+            acc1 = _mm512_fmadd_ps(_mm512_set1_ps(a1[k + 3]), w3, acc1);
+        }
+        if (valid_m > 2) {
+            acc2 = _mm512_fmadd_ps(_mm512_set1_ps(a2[k + 0]), w0, acc2);
+            acc2 = _mm512_fmadd_ps(_mm512_set1_ps(a2[k + 1]), w1, acc2);
+            acc2 = _mm512_fmadd_ps(_mm512_set1_ps(a2[k + 2]), w2, acc2);
+            acc2 = _mm512_fmadd_ps(_mm512_set1_ps(a2[k + 3]), w3, acc2);
+        }
+        if (valid_m > 3) {
+            acc3 = _mm512_fmadd_ps(_mm512_set1_ps(a3[k + 0]), w0, acc3);
+            acc3 = _mm512_fmadd_ps(_mm512_set1_ps(a3[k + 1]), w1, acc3);
+            acc3 = _mm512_fmadd_ps(_mm512_set1_ps(a3[k + 2]), w2, acc3);
+            acc3 = _mm512_fmadd_ps(_mm512_set1_ps(a3[k + 3]), w3, acc3);
+        }
+    }
+    for (; k < k_size; ++k) {
+        __m512 w = load_i16_as_f32_16_x86(weight_block + k * 16);
+        if (valid_m > 0) acc0 = _mm512_fmadd_ps(_mm512_set1_ps(a0[k]), w, acc0);
+        if (valid_m > 1) acc1 = _mm512_fmadd_ps(_mm512_set1_ps(a1[k]), w, acc1);
+        if (valid_m > 2) acc2 = _mm512_fmadd_ps(_mm512_set1_ps(a2[k]), w, acc2);
+        if (valid_m > 3) acc3 = _mm512_fmadd_ps(_mm512_set1_ps(a3[k]), w, acc3);
+    }
+
+    const __m512 s = _mm512_loadu_ps(scales);
+    const __m512 b = bias ? _mm512_loadu_ps(bias) : _mm512_setzero_ps();
+    acc0 = _mm512_fmadd_ps(acc0, s, b);
+    acc1 = _mm512_fmadd_ps(acc1, s, b);
+    acc2 = _mm512_fmadd_ps(acc2, s, b);
+    acc3 = _mm512_fmadd_ps(acc3, s, b);
+
+    const __mmask16 mask = valid_n == 16 ? 0xFFFFu : static_cast<__mmask16>((1u << valid_n) - 1u);
+    if (valid_m > 0) _mm512_mask_storeu_ps(output, mask, acc0);
+    if (valid_m > 1) _mm512_mask_storeu_ps(output + output_stride, mask, acc1);
+    if (valid_m > 2) _mm512_mask_storeu_ps(output + 2 * output_stride, mask, acc2);
+    if (valid_m > 3) _mm512_mask_storeu_ps(output + 3 * output_stride, mask, acc3);
+}
+
+static void linear_gemm_x86(
+    const float* input,
+    const int16_t* codes_knr16,
+    const float* scales_padded16,
+    const float* bias,
+    float* output,
+    int64_t m,
+    int64_t out,
+    int64_t k_size,
+    int64_t blocks,
+    int threads
+) {
+    const int64_t mblocks = (m + 3) / 4;
+    const int64_t nblocks = (out + 15) / 16;
+    parallel_for_threads(0, mblocks * nblocks, threads, [&](int64_t begin, int64_t end) {
+        for (int64_t task = begin; task < end; ++task) {
+            const int64_t mb = task / nblocks;
+            const int64_t nb = task - mb * nblocks;
+            const int64_t m0 = mb * 4;
+            const int64_t n0 = nb * 16;
+            const int valid_m = int(std::min<int64_t>(4, m - m0));
+            const int valid_n = int(std::min<int64_t>(16, out - n0));
+            linear_microkernel_4x16_x86(
+                input + m0 * k_size,
+                k_size,
+                codes_knr16 + nb * k_size * 16,
+                scales_padded16 + n0 * blocks,
+                bias ? bias + n0 : nullptr,
+                output + m0 * out + n0,
+                out,
+                k_size,
+                valid_m,
+                valid_n
+            );
+        }
+    });
+}
+
+static inline void embedding_decode_x86_i32(
+    const int32_t* indices,
+    int64_t count,
+    const int16_t* codes,
+    const float* scales,
+    float* output,
+    int64_t out,
+    int64_t k_size,
+    int threads
+) {
+    parallel_for_threads(0, count, threads, [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            const int64_t row = indices[i];
+            TORCH_CHECK(row >= 0 && row < out, "embedding index out of range");
+            const int16_t* src = codes + row * k_size;
+            float* dst = output + i * k_size;
+            const __m512 scale = _mm512_set1_ps(scales[row]);
+            int64_t k = 0;
+            for (; k + 31 < k_size; k += 32) {
+                __m512 x0 = load_i16_as_f32_16_x86(src + k);
+                __m512 x1 = load_i16_as_f32_16_x86(src + k + 16);
+                _mm512_storeu_ps(dst + k, _mm512_mul_ps(x0, scale));
+                _mm512_storeu_ps(dst + k + 16, _mm512_mul_ps(x1, scale));
+            }
+            for (; k + 15 < k_size; k += 16) {
+                __m512 x = load_i16_as_f32_16_x86(src + k);
+                _mm512_storeu_ps(dst + k, _mm512_mul_ps(x, scale));
+            }
+            for (; k < k_size; ++k) dst[k] = static_cast<float>(src[k]) * scales[row];
+        }
+    });
+}
+
+static inline void embedding_decode_x86_i64(
+    const int64_t* indices,
+    int64_t count,
+    const int16_t* codes,
+    const float* scales,
+    float* output,
+    int64_t out,
+    int64_t k_size,
+    int threads
+) {
+    parallel_for_threads(0, count, threads, [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+            const int64_t row = indices[i];
+            TORCH_CHECK(row >= 0 && row < out, "embedding index out of range");
+            const int16_t* src = codes + row * k_size;
+            float* dst = output + i * k_size;
+            const __m512 scale = _mm512_set1_ps(scales[row]);
+            int64_t k = 0;
+            for (; k + 31 < k_size; k += 32) {
+                __m512 x0 = load_i16_as_f32_16_x86(src + k);
+                __m512 x1 = load_i16_as_f32_16_x86(src + k + 16);
+                _mm512_storeu_ps(dst + k, _mm512_mul_ps(x0, scale));
+                _mm512_storeu_ps(dst + k + 16, _mm512_mul_ps(x1, scale));
+            }
+            for (; k + 15 < k_size; k += 16) {
+                __m512 x = load_i16_as_f32_16_x86(src + k);
+                _mm512_storeu_ps(dst + k, _mm512_mul_ps(x, scale));
+            }
+            for (; k < k_size; ++k) dst[k] = static_cast<float>(src[k]) * scales[row];
+        }
+    });
+}
+
+static inline void make_conv_tile_4xk_x86(
+    const float* input,
+    int64_t batch_index,
+    int64_t p0,
+    int valid_m,
+    int64_t in_channels,
+    int64_t ih,
+    int64_t iw,
+    int64_t oh_width,
+    int64_t kernel_h,
+    int64_t kernel_w,
+    int64_t stride,
+    int64_t padding,
+    float* tile
+) {
+    const int64_t k_size = in_channels * kernel_h * kernel_w;
+    for (int m = 0; m < valid_m; ++m) {
+        const int64_t pos = p0 + m;
+        const int64_t oh_i = pos / oh_width;
+        const int64_t ow_i = pos - oh_i * oh_width;
+        float* dst = tile + int64_t(m) * k_size;
+        int64_t kk = 0;
+        for (int64_t ic = 0; ic < in_channels; ++ic) {
+            const float* base = input + ((batch_index * in_channels + ic) * ih) * iw;
+            for (int64_t kh = 0; kh < kernel_h; ++kh) {
+                const int64_t ih_i = oh_i * stride + kh - padding;
+                for (int64_t kw = 0; kw < kernel_w; ++kw, ++kk) {
+                    const int64_t iw_i = ow_i * stride + kw - padding;
+                    dst[kk] = (ih_i >= 0 && ih_i < ih && iw_i >= 0 && iw_i < iw)
+                        ? base[ih_i * iw + iw_i]
+                        : 0.0f;
+                }
+            }
+        }
+    }
+    for (int m = valid_m; m < 4; ++m) {
+        std::memset(tile + int64_t(m) * k_size, 0, static_cast<size_t>(k_size) * sizeof(float));
+    }
+}
+
+static void conv2d_knr16_x86(
+    const float* input,
+    const int16_t* codes_knr16,
+    const float* scales_padded16,
+    const float* bias,
+    float* output,
+    int64_t batch,
+    int64_t in_channels,
+    int64_t ih,
+    int64_t iw,
+    int64_t out_channels,
+    int64_t blocks,
+    int64_t kernel_h,
+    int64_t kernel_w,
+    int64_t stride,
+    int64_t padding,
+    int64_t oh,
+    int64_t ow,
+    int threads
+) {
+    const int64_t k_size = in_channels * kernel_h * kernel_w;
+    const int64_t p_count = oh * ow;
+    const int64_t tiles_per_batch = (p_count + 3) / 4;
+    const int64_t total_tiles = batch * tiles_per_batch;
+    const int64_t nblocks = (out_channels + 15) / 16;
+    int64_t nb_group = nblocks;
+    if (total_tiles < threads) {
+        const int64_t groups_needed = (threads + std::max<int64_t>(1, total_tiles) - 1) /
+                                      std::max<int64_t>(1, total_tiles);
+        nb_group = std::max<int64_t>(1, (nblocks + groups_needed - 1) / groups_needed);
+    }
+    const int64_t ngroups = (nblocks + nb_group - 1) / nb_group;
+    const int64_t total_tasks = total_tiles * ngroups;
+
+    parallel_for_threads(0, total_tasks, threads, [&](int64_t begin, int64_t end) {
+        std::vector<float, AlignedAllocator<float>> tile(static_cast<size_t>(4 * k_size));
+        alignas(64) float tmp[4 * 16];
+        for (int64_t task = begin; task < end; ++task) {
+            const int64_t tile_group = task / ngroups;
+            const int64_t group = task - tile_group * ngroups;
+            const int64_t b = tile_group / tiles_per_batch;
+            const int64_t tile_index = tile_group - b * tiles_per_batch;
+            const int64_t p0 = tile_index * 4;
+            const int valid_m = int(std::min<int64_t>(4, p_count - p0));
+            make_conv_tile_4xk_x86(
+                input, b, p0, valid_m, in_channels, ih, iw, ow,
+                kernel_h, kernel_w, stride, padding, tile.data()
+            );
+            const int64_t nb_begin = group * nb_group;
+            const int64_t nb_end = std::min<int64_t>(nblocks, nb_begin + nb_group);
+            for (int64_t nb = nb_begin; nb < nb_end; ++nb) {
+                const int64_t n0 = nb * 16;
+                const int valid_n = int(std::min<int64_t>(16, out_channels - n0));
+                linear_microkernel_4x16_x86(
+                    tile.data(),
+                    k_size,
+                    codes_knr16 + nb * k_size * 16,
+                    scales_padded16 + n0 * blocks,
+                    bias ? bias + n0 : nullptr,
+                    tmp,
+                    16,
+                    k_size,
+                    valid_m,
+                    valid_n
+                );
+                for (int m = 0; m < valid_m; ++m) {
+                    const int64_t pos = p0 + m;
+                    const int64_t oh_i = pos / ow;
+                    const int64_t ow_i = pos - oh_i * ow;
+                    for (int lane = 0; lane < valid_n; ++lane) {
+                        const int64_t oc = n0 + lane;
+                        output[((b * out_channels + oc) * oh + oh_i) * ow + ow_i] =
+                            tmp[m * 16 + lane];
+                    }
+                }
+            }
+        }
+    });
+}
+#endif
+
 static inline float dyop_dot(
     const float* input,
     const int16_t* codes,
@@ -957,6 +1278,7 @@ py::dict pack_native_cpu_weight(
     const int64_t out_padded = ((out + 7) / 8) * 8;
     const int64_t out_padded16 = ((out + 15) / 16) * 16;
     auto codes_knr = at::zeros({out_padded / 8, k, 8}, signs.options().dtype(at::kShort));
+    auto codes_knr16 = at::zeros({out_padded16 / 16, k, 16}, signs.options().dtype(at::kShort));
     auto codes_i8_knr = at::empty({0}, signs.options().dtype(at::kChar));
     const bool use_i8_knr = bits <= 7;
     if (use_i8_knr) {
@@ -966,17 +1288,20 @@ py::dict pack_native_cpu_weight(
     auto codes_f32_knr16 = at::zeros({out_padded16 / 16, k, 16}, signs.options().dtype(at::kFloat));
     auto scales = at::empty({out, blocks}, signs.options().dtype(at::kFloat));
     auto scales_padded = at::zeros({out_padded, blocks}, signs.options().dtype(at::kFloat));
+    auto scales_padded16 = at::zeros({out_padded16, blocks}, signs.options().dtype(at::kFloat));
 
     const int8_t* sign_ptr = signs.data_ptr<int8_t>();
     const int32_t* mag_ptr = magnitude.data_ptr<int32_t>();
     const int16_t* exp_ptr = exponents.data_ptr<int16_t>();
     int16_t* code_ptr = codes.data_ptr<int16_t>();
     int16_t* knr_ptr = codes_knr.data_ptr<int16_t>();
+    int16_t* knr16_ptr = codes_knr16.data_ptr<int16_t>();
     int8_t* knr_i8_ptr = use_i8_knr ? codes_i8_knr.data_ptr<int8_t>() : nullptr;
     float* knr_f32_ptr = codes_f32_knr.data_ptr<float>();
     float* knr16_f32_ptr = codes_f32_knr16.data_ptr<float>();
     float* scale_ptr = scales.data_ptr<float>();
     float* scale_pad_ptr = scales_padded.data_ptr<float>();
+    float* scale_pad16_ptr = scales_padded16.data_ptr<float>();
 
     at::parallel_for(0, out, 1, [&](int64_t begin, int64_t end) {
         for (int64_t n = begin; n < end; ++n) {
@@ -985,6 +1310,7 @@ py::dict pack_native_cpu_weight(
                 const float scale = std::ldexp(1.0f, int(exponent + shift - 1));
                 scale_ptr[n * blocks + b] = scale;
                 scale_pad_ptr[n * blocks + b] = scale;
+                scale_pad16_ptr[n * blocks + b] = scale;
             }
             const int64_t row_offset = n * k;
             for (int64_t i = 0; i < k; ++i) {
@@ -1000,7 +1326,9 @@ py::dict pack_native_cpu_weight(
                 knr_f32_ptr[knr_offset] = static_cast<float>(code);
                 const int64_t nb16 = n / 16;
                 const int64_t lane16 = n - nb16 * 16;
-                knr16_f32_ptr[(nb16 * k + i) * 16 + lane16] = static_cast<float>(code);
+                const int64_t knr16_offset = (nb16 * k + i) * 16 + lane16;
+                knr16_ptr[knr16_offset] = code;
+                knr16_f32_ptr[knr16_offset] = static_cast<float>(code);
                 if (knr_i8_ptr) {
                     knr_i8_ptr[knr_offset] = static_cast<int8_t>(code);
                 }
@@ -1011,11 +1339,13 @@ py::dict pack_native_cpu_weight(
     py::dict packed;
     packed["codes"] = codes;
     packed["codes_knr"] = codes_knr;
+    packed["codes_knr16"] = codes_knr16;
     if (use_i8_knr) packed["codes_i8_knr"] = codes_i8_knr;
     packed["codes_f32_knr"] = codes_f32_knr;
     packed["codes_f32_knr16"] = codes_f32_knr16;
     packed["scales"] = scales;
     packed["scales_padded"] = scales_padded;
+    packed["scales_padded16"] = scales_padded16;
     packed["shape"] = shape;
     packed["group_size"] = group_size;
     packed["bits"] = bits;
@@ -1051,6 +1381,29 @@ at::Tensor dyadic_linear_packed_native_cpu(
 
 #if defined(__APPLE__) && defined(__aarch64__) && (defined(__ARM_NEON) || defined(__ARM_NEON__))
     if (linear_gemm_amx(x, packed, bias, y, m, blocks)) {
+        return output;
+    }
+#endif
+
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+    if (
+        packed.group_size >= packed.k &&
+        blocks == 1 &&
+        packed.codes_knr16.defined() &&
+        packed.scales_padded16.defined()
+    ) {
+        linear_gemm_x86(
+            x,
+            packed.codes_knr16.data_ptr<int16_t>(),
+            packed.scales_padded16.data_ptr<float>(),
+            bias,
+            y,
+            m,
+            packed.out,
+            packed.k,
+            blocks,
+            native_thread_count()
+        );
         return output;
     }
 #endif
@@ -1163,6 +1516,35 @@ at::Tensor dyadic_embedding_packed_native_cpu(
     const int64_t count = indices.numel();
     const int64_t blocks = packed.scales.size(1);
 
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+    if (blocks == 1) {
+        if (indices.scalar_type() == at::kLong) {
+            embedding_decode_x86_i64(
+                indices.data_ptr<int64_t>(),
+                count,
+                codes,
+                scales,
+                y,
+                packed.out,
+                packed.k,
+                native_thread_count()
+            );
+        } else {
+            embedding_decode_x86_i32(
+                indices.data_ptr<int32_t>(),
+                count,
+                codes,
+                scales,
+                y,
+                packed.out,
+                packed.k,
+                native_thread_count()
+            );
+        }
+        return output;
+    }
+#endif
+
     auto decode_row = [&](int64_t i, int64_t row) {
         TORCH_CHECK(row >= 0 && row < packed.out, "embedding index out of range");
         const int16_t* src = codes + row * packed.k;
@@ -1229,6 +1611,37 @@ at::Tensor dyadic_conv2d_packed_native_cpu(
     float* y = output.data_ptr<float>();
     const int64_t blocks = packed.scales.size(1);
     const int64_t total = batch * packed.out * oh * ow;
+
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+    if (
+        packed.group_size >= packed.k &&
+        blocks == 1 &&
+        packed.codes_knr16.defined() &&
+        packed.scales_padded16.defined()
+    ) {
+        conv2d_knr16_x86(
+            x,
+            packed.codes_knr16.data_ptr<int16_t>(),
+            packed.scales_padded16.data_ptr<float>(),
+            bias,
+            y,
+            batch,
+            in_channels,
+            ih,
+            iw,
+            packed.out,
+            blocks,
+            kernel_h,
+            kernel_w,
+            stride,
+            padding,
+            oh,
+            ow,
+            native_thread_count()
+        );
+        return output;
+    }
+#endif
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
     if (packed.group_size >= packed.k && packed.codes_knr.defined() && packed.scales_padded.defined()) {

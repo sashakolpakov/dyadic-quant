@@ -1,0 +1,145 @@
+# Remote Replication Runner
+
+Use this on the A10 host to run Level 1 GPU materialized baselines and Level 2
+native CPU dyop experiments with one command. Outputs remain separated:
+
+- `results/level1/<run-id>/`
+- `results/level2/<run-id>/`
+
+Each run writes per-step logs plus CSV/JSON outputs, then creates a single
+`dyadic-experiments-<run-id>.tar.gz` bundle for fetching.
+
+For Level 2 runs, inspect:
+
+```text
+results/level2/<run-id>/evidence/native_evidence_audit.json
+results/level2/<run-id>/evidence/native_evidence_audit.md
+```
+
+Those files summarize Qwen memory/quality, Qwen textual cosine/judge metrics,
+ResNet memory/logit/accuracy metrics, ResNet per-class metrics, and native
+kernel speed rows. The audit is informational by default, so the bundle is still
+created when a metric is weak or missing.
+
+To make the audit fail the Docker run when a quality threshold is missed, add
+`--strict-audit` with explicit cutoffs:
+
+```bash
+docker run --gpus all --ipc=host --rm \
+  -v "$PWD/data:/workspace/data" \
+  -v "$PWD/results:/workspace/results" \
+  -v dyadic-ollama:/root/.ollama \
+  dyadic-experiments --level all --threads 30 --strict-audit \
+    --min-qwen-agreement 0.80 \
+    --max-qwen-perplexity-ratio 1.20 \
+    --min-resnet-logit-cosine 0.98 \
+    --min-resnet-reference-agreement 0.90 \
+    --max-resnet-top1-drop 0.03
+```
+
+## Build
+
+```bash
+docker build -t dyadic-experiments .
+```
+
+The image includes Ollama. The entrypoint starts `ollama serve`, pulls the
+models needed by the requested command, and then runs `dyadic-experiments.sh`.
+Mount `/root/.ollama` as a Docker volume so model pulls are reused.
+
+The runner also prepares missing public assets by default:
+
+- Qwen2.5-0.5B-Instruct from Hugging Face;
+- ResNet18 checkpoint from PyTorch;
+- Imagenette2-160 from the fast.ai public bucket.
+
+Keep `data/` mounted read-write for this. Add `--no-prepare-data` when the
+remote data directory is already complete and should not be modified. The small
+LLM eval files `wikitext2_test.txt` and `arc_easy.json` are still expected under
+`data/llm_eval` or the directory passed with `--data-dir`.
+
+## Run Level 1
+
+```bash
+docker run --gpus all --ipc=host --rm \
+  -v "$PWD/data:/workspace/data" \
+  -v "$PWD/results:/workspace/results" \
+  -v dyadic-ollama:/root/.ollama \
+  dyadic-experiments --level 1 --threads 30
+```
+
+## Run Level 2
+
+```bash
+docker run --gpus all --ipc=host --rm \
+  -v "$PWD/data:/workspace/data" \
+  -v "$PWD/results:/workspace/results" \
+  -v dyadic-ollama:/root/.ollama \
+  dyadic-experiments --level 2 --threads 30
+```
+
+## Run Both
+
+```bash
+docker run --gpus all --ipc=host --rm \
+  -v "$PWD/data:/workspace/data" \
+  -v "$PWD/results:/workspace/results" \
+  -v dyadic-ollama:/root/.ollama \
+  dyadic-experiments --level all --threads 30
+```
+
+## Ollama Baseline
+
+By default the container starts its own Ollama server and pulls:
+
+- `qwen2.5:0.5b` for the ARC baseline;
+- `nomic-embed-text` for cosine embeddings;
+- `gemma3:4b` as the default Ollama judge.
+
+Set extra or replacement pulls with `DYADIC_OLLAMA_MODELS`, or set
+`DYADIC_JUDGE_MODEL` / `--judge-model` to use a different local judge.
+
+```bash
+docker run --gpus all --ipc=host --rm \
+  -v "$PWD/data:/workspace/data" \
+  -v "$PWD/results:/workspace/results" \
+  -v dyadic-ollama:/root/.ollama \
+  -e DYADIC_OLLAMA_MODELS="qwen2.5:0.5b nomic-embed-text llama3.1:8b" \
+  dyadic-experiments --level all --threads 30 --judge-model llama3.1:8b
+```
+
+To use an Ollama daemon already running on the host, disable the container
+server and use host networking:
+
+```bash
+docker run --gpus all --ipc=host --network host --rm \
+  -v "$PWD/data:/workspace/data" \
+  -v "$PWD/results:/workspace/results" \
+  -e DYADIC_START_OLLAMA=0 \
+  dyadic-experiments --level all --threads 30 --require-ollama
+```
+
+## Fetch
+
+The script prints the bundle path at the end. From your laptop:
+
+```bash
+scp user@A10_HOST:/path/to/dyadic-quant/results/level2/<run-id>/dyadic-experiments-<run-id>.tar.gz .
+```
+
+For a Level 1-only run, the bundle is under `results/level1/<run-id>/`.
+
+## Cheap Local Checks
+
+These only validate wiring and command construction:
+
+```bash
+bash dyadic-experiments.sh --level 1 --quick --skip-ollama --dry-run
+bash dyadic-experiments.sh --level 2 --quick --skip-ollama --dry-run
+```
+
+For a real short run on a prepared machine:
+
+```bash
+./dyadic-experiments.sh --level all --quick --threads 30
+```

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 from typing import Any
 
@@ -44,13 +45,16 @@ def build_native_cpu(*, force: bool = False) -> str:
         )
 
     _BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    extra_cflags = ["-O3", "-ffast-math"]
+    if platform.machine().lower() in {"x86_64", "amd64"}:
+        extra_cflags.append("-march=native")
 
     try:
         module = load(
             name="dyadic_quant_level2_native",
             sources=[str(source)],
             build_directory=str(_BUILD_DIR),
-            extra_cflags=["-O3", "-ffast-math"],
+            extra_cflags=extra_cflags,
             verbose=False,
         )
     except Exception as exc:

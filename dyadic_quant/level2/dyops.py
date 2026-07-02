@@ -183,9 +183,10 @@ def dyadic_linear_native_cpu(
     *,
     bias: torch.Tensor | None = None,
     bits: int | None = None,
+    packed_weight=None,
 ) -> torch.Tensor:
     p, fn, _, _ = _require_native()
-    weight = _pack_native_weight(p, encoded, bits)
+    weight = packed_weight if packed_weight is not None else _pack_native_weight(p, encoded, bits)
     if inputs.ndim <= 2:
         return fn(inputs, weight, bias)
     original_shape = inputs.shape[:-1]
@@ -199,9 +200,11 @@ def dyadic_embedding_native_cpu(
     *,
     bits: int | None = None,
     padding_idx: int | None = None,
+    packed_weight=None,
 ) -> torch.Tensor:
     p, _, fn, _ = _require_native()
-    return fn(indices, _pack_native_weight(p, encoded, bits))
+    weight = packed_weight if packed_weight is not None else _pack_native_weight(p, encoded, bits)
+    return fn(indices, weight)
 
 
 def dyadic_conv2d_native_cpu(
@@ -213,18 +216,19 @@ def dyadic_conv2d_native_cpu(
     stride: int | tuple[int, int] = 1,
     padding: int | tuple[int, int] = 0,
     groups: int = 1,
+    packed_weight=None,
 ) -> torch.Tensor:
-    weight = _dyop_weight(encoded, bits)
-    _validate_native_conv2d(weight, stride=stride, padding=padding, groups=groups)
+    weight_shape = tuple(int(dim) for dim in encoded.signs.shape)
+    _validate_native_conv2d_shape(weight_shape, stride=stride, padding=padding, groups=groups)
     p, _, _, fn = _require_native()
     return fn(
         inputs,
-        _pack_native_weight(p, encoded, bits),
+        packed_weight if packed_weight is not None else _pack_native_weight(p, encoded, bits),
         bias,
         _first(stride),
         _first(padding),
-        int(weight.shape[2]),
-        int(weight.shape[3]),
+        weight_shape[2],
+        weight_shape[3],
     )
 
 
@@ -247,8 +251,28 @@ def _pack_native_weight(pack_fn, encoded: DyadicTensor, bits: int | None):
     )
 
 
+def pack_native_weight(encoded: DyadicTensor, bits: int | None):
+    pack_fn, _, _, _ = _require_native()
+    return _pack_native_weight(pack_fn, encoded, bits)
+
+
 def _validate_native_conv2d(
     weight: torch.Tensor,
+    *,
+    stride: int | tuple[int, int],
+    padding: int | tuple[int, int],
+    groups: int,
+) -> None:
+    _validate_native_conv2d_shape(
+        tuple(int(dim) for dim in weight.shape),
+        stride=stride,
+        padding=padding,
+        groups=groups,
+    )
+
+
+def _validate_native_conv2d_shape(
+    weight_shape: tuple[int, ...],
     *,
     stride: int | tuple[int, int],
     padding: int | tuple[int, int],
@@ -260,9 +284,9 @@ def _validate_native_conv2d(
         raise NotImplementedError(
             "native Conv2d currently supports square stride and padding only"
         )
-    if weight.ndim != 4:
+    if len(weight_shape) != 4:
         raise NotImplementedError("native Conv2d requires a 4D weight tensor")
-    if weight.shape[2:] not in ((1, 1), (3, 3)):
+    if weight_shape[2:] not in ((1, 1), (3, 3)):
         raise NotImplementedError(
             "native Conv2d currently supports only 1x1 and 3x3 kernels"
         )

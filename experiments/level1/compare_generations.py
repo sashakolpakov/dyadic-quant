@@ -230,7 +230,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--generations-file",
         type=Path,
-        default=Path("results/qwen25_generations.json"),
+        default=Path("results/level1/qwen25_generations.json"),
     )
     parser.add_argument("--source-variant", default="bf16_source")
     parser.add_argument("--embed-model", default="nomic-embed-text")
@@ -270,7 +270,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Optional subset of non-source variants to compare.",
     )
-    parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("results/level1"))
     return parser.parse_args()
 
 

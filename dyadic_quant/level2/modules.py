@@ -17,6 +17,7 @@ from dyadic_quant.level2.dyops import (
     native_adaptive_avg_pool2d_cpu,
     native_max_pool2d_cpu,
     native_relu_cpu,
+    pack_native_weight,
 )
 
 
@@ -42,17 +43,28 @@ class DyadicLinear(nn.Module):
         self.bits = bits
         self.encoded = encoded
         self.linear_backend = _validate_backend(linear_backend, "linear")
+        self._native_packed_weights: dict[int, object] = {}
         bias = source.bias
         if bias is not None:
             self.register_buffer("bias", bias.detach().clone())
 
+    def _native_packed_weight(self) -> object:
+        if self.bits not in self._native_packed_weights:
+            self._native_packed_weights[self.bits] = pack_native_weight(
+                self.encoded, self.bits
+            )
+        return self._native_packed_weights[self.bits]
+
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        fn = (
-            dyadic_linear_native_cpu
-            if self.linear_backend == "native-cpu"
-            else dyadic_linear
-        )
-        return fn(
+        if self.linear_backend == "native-cpu":
+            return dyadic_linear_native_cpu(
+                inputs,
+                self.encoded,
+                bias=getattr(self, "bias", None),
+                bits=self.bits,
+                packed_weight=self._native_packed_weight(),
+            )
+        return dyadic_linear(
             inputs,
             self.encoded,
             bias=getattr(self, "bias", None),
@@ -77,14 +89,25 @@ class DyadicEmbedding(nn.Module):
         self.bits = bits
         self.encoded = encoded
         self.embedding_backend = _validate_backend(embedding_backend, "embedding")
+        self._native_packed_weights: dict[int, object] = {}
+
+    def _native_packed_weight(self) -> object:
+        if self.bits not in self._native_packed_weights:
+            self._native_packed_weights[self.bits] = pack_native_weight(
+                self.encoded, self.bits
+            )
+        return self._native_packed_weights[self.bits]
 
     def forward(self, indices: torch.Tensor) -> torch.Tensor:
-        fn = (
-            dyadic_embedding_native_cpu
-            if self.embedding_backend == "native-cpu"
-            else dyadic_embedding
-        )
-        return fn(
+        if self.embedding_backend == "native-cpu":
+            return dyadic_embedding_native_cpu(
+                indices,
+                self.encoded,
+                bits=self.bits,
+                padding_idx=self.padding_idx,
+                packed_weight=self._native_packed_weight(),
+            )
+        return dyadic_embedding(
             indices,
             self.encoded,
             bits=self.bits,
@@ -112,17 +135,31 @@ class DyadicConv2d(nn.Module):
         self.bits = bits
         self.encoded = encoded
         self.conv_backend = _validate_backend(conv_backend, "conv")
+        self._native_packed_weights: dict[int, object] = {}
         bias = source.bias
         if bias is not None:
             self.register_buffer("bias", bias.detach().clone())
 
+    def _native_packed_weight(self) -> object:
+        if self.bits not in self._native_packed_weights:
+            self._native_packed_weights[self.bits] = pack_native_weight(
+                self.encoded, self.bits
+            )
+        return self._native_packed_weights[self.bits]
+
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        fn = (
-            dyadic_conv2d_native_cpu
-            if self.conv_backend == "native-cpu"
-            else dyadic_conv2d
-        )
-        return fn(
+        if self.conv_backend == "native-cpu":
+            return dyadic_conv2d_native_cpu(
+                inputs,
+                self.encoded,
+                bias=getattr(self, "bias", None),
+                bits=self.bits,
+                stride=self.stride,
+                padding=self.padding,
+                groups=self.groups,
+                packed_weight=self._native_packed_weight(),
+            )
+        return dyadic_conv2d(
             inputs,
             self.encoded,
             bias=getattr(self, "bias", None),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 from pathlib import Path
 from time import perf_counter
@@ -33,6 +34,11 @@ FIELDS = [
     "speedup_vs_torch",
     "max_abs_error",
 ]
+
+
+def set_native_threads(threads: int) -> None:
+    os.environ["DYOP_CPU_THREADS"] = str(threads)
+    torch.set_num_threads(threads)
 
 
 def time_call(fn, *, warmup: int, repeats: int) -> tuple[torch.Tensor, float]:
@@ -84,7 +90,7 @@ def benchmark_linear(
             warmup=2,
             repeats=repeats,
         )
-        torch.set_num_threads(dyop_threads)
+        set_native_threads(dyop_threads)
         warm_native_cpu_workers()
         actual, dyop_ms = time_call(
             lambda: dyadic_linear_packed_native_cpu(inputs, packed, bias),
@@ -126,7 +132,7 @@ def benchmark_embedding(bits: int, repeats: int, *, torch_threads: int, dyop_thr
         warmup=2,
         repeats=repeats,
     )
-    torch.set_num_threads(dyop_threads)
+    set_native_threads(dyop_threads)
     actual, dyop_ms = time_call(
         lambda: dyadic_embedding_packed_native_cpu(indices, packed),
         warmup=2,
@@ -170,7 +176,7 @@ def benchmark_conv2d(bits: int, repeats: int, *, torch_threads: int, dyop_thread
             warmup=1,
             repeats=repeats,
         )
-        torch.set_num_threads(dyop_threads)
+        set_native_threads(dyop_threads)
         actual, dyop_ms = time_call(
             lambda: dyadic_conv2d_packed_native_cpu(
                 inputs,
@@ -205,6 +211,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--torch-threads", type=int, default=1)
     parser.add_argument("--dyop-threads", type=int, default=None)
     parser.add_argument(
+        "--embedding-dyop-threads",
+        type=int,
+        default=None,
+        help="Native worker threads for embedding; defaults to --dyop-threads.",
+    )
+    parser.add_argument(
         "--ops",
         nargs="+",
         choices=("linear", "embedding", "conv2d"),
@@ -233,6 +245,7 @@ def main() -> None:
     args = parse_args()
     build_native_cpu()
     dyop_threads = args.dyop_threads or args.torch_threads
+    embedding_dyop_threads = args.embedding_dyop_threads or dyop_threads
     rows: list[dict[str, object]] = []
     if "linear" in args.ops:
         rows.extend(
@@ -250,7 +263,7 @@ def main() -> None:
                 args.bits,
                 args.repeats,
                 torch_threads=args.torch_threads,
-                dyop_threads=dyop_threads,
+                dyop_threads=embedding_dyop_threads,
             )
         )
     if "conv2d" in args.ops:

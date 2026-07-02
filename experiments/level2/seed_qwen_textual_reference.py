@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-generations",
         type=Path,
-        default=Path("results/qwen25_generations.json"),
+        default=Path("results/level1/qwen25_generations.json"),
     )
     parser.add_argument(
         "--source-variant",

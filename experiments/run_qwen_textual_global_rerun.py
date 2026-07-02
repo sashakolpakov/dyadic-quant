@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("results/qwen25_textual_global_rerun"),
+        default=Path("results/level1/qwen25_textual_global_rerun"),
     )
     parser.add_argument(
         "--judge-model",
@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--control-lineage",
         type=Path,
-        default=Path("results/qwen25_control_lineage.json"),
+        default=Path("results/level1/qwen25_control_lineage.json"),
     )
     parser.add_argument(
         "--load-dyadic",
