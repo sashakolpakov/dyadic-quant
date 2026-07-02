@@ -1,0 +1,56 @@
+{
+  "prompts": {
+    "arc": [
+      {
+        "id": "Mercury_417466",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which statement best explains why photosynthesis is the foundation of most food webs?\nA. Sunlight is the source of energy for nearly all ecosystems.\nB. Most ecosystems are found on land instead of in water.\nC. Carbon dioxide is more available than other gases.\nD. The producers in all ecosystems are plants.<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7081673",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which piece of safety equipment is used to keep mold spores from entering the respiratory system?\nA. safety goggles\nB. breathing mask\nC. rubber gloves\nD. lead apron<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7239733",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Meiosis is a type of cell division in which germ cells divide to produce haploid cells. Where does meiosis occur?\nA. brain cells\nB. bone cells\nC. muscle cells\nD. ovary cells<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "NYSEDREGENTS_2015_4_8",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which characteristic describes the texture of a kitten's fur?\nA. gray\nB. warm\nC. long\nD. soft<|im_end|>\n<|im_start|>assistant\n"
+      },
+      {
+        "id": "Mercury_7037258",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which best describes the structure of an atom?\nA. a lightweight core surrounded by neutral particles\nB. a massive core surrounded by negatively-charged particles\nC. a network of interacting positive and negative particles\nD. overlapping layers of neutral, positive, and negative particles<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "wikitext": [
+      {
+        "id": "wiki_0",
+        "prompt": " = Robert Boulter = \n\n\n Robert Boulter is an English film , television and theatre actor . He had a guest @-@ starring role on the television series The Bill in 2000 . This was followed by a"
+      },
+      {
+        "id": "wiki_2714",
+        "prompt": " : the census of 754 recorded 52 @.@ 9 million people , but ten years later , the census counted just 16 @.@ 9 million , the remainder having been displaced or killed . During this time"
+      },
+      {
+        "id": "wiki_5428",
+        "prompt": " look to his technical mastery , while literary radicals were inspired by his innovations . Since the establishment of the People 's Republic of China , Du Fu 's loyalty to the state and concern for the poor have been interpreted as embryonic nationalism and"
+      }
+    ]
+  },
+  "generations": {
+    "float32_source": {
+      "arc": {
+        "Mercury_417466": "The correct answer is D. The producers in all ecosystems are plants.\n\nExplanation:\nPhotosynthesis is the process by which plants convert light energy from the sun into chemical energy stored in glucose through the production of oxygen. This process is fundamental to almost all food webs because it provides the primary source of energy for most living organisms.",
+        "Mercury_7081673": "The correct answer is B. breathing mask.\n\nExplanation:\nA breathing mask is specifically designed to protect individuals from inhaling harmful dust, fumes, or other particles that could cause respiratory issues. It typically includes a facepiece with filters that capture particulate matter before it reaches the lungs. This ensures that the wearer remains protected",
+        "Mercury_7239733": "To determine where meiosis occurs, let's first understand what meiosis is:\n\n1. **Meiosis**: This is a type of cell division that results in the production of gametes (sperm or egg cells) from diploid cells (gametocytes). It involves two rounds of cell division.\n\n2. **",
+        "NYSEDREGENTS_2015_4_8": "The correct answer is D. soft.\n\nExplanation:\nSoftness in the description of a kitten's fur refers to its texture. Soft fur typically has a smooth, silky feel that feels luxurious when rubbed against. This characteristic is often associated with kittens due to their natural tendency to curl up and squirm in their mother's embrace",
+        "Mercury_7037258": "The correct answer is C. A network of interacting positive and negative particles.\n\nExplanation:\nAn atom consists of three main components: protons, neutrons, and electrons. The protons carry the positive charge, while the neutrons have no charge but provide stability to the nucleus. Electrons orbit around the nucleus in specific"
+      },
+      "wikitext": {
+        "wiki_0": " guest @-@ starring role on the BBC drama series The Young Vic in 2001 . In 2003 he starred as the character of John Smith in the BBC drama series The Young Vic . \n\nBased on that paragraph can we conclude that this sentence is true?\nRobert Boulter has been",
+        "wiki_2714": ", what was the percentage increase in the population? To determine the percentage increase in the population during this period, we need to follow these steps:\n\n1. Calculate the total number of people who were counted in the census.\n2. Determine the difference between the two counts.\n3. Divide the difference by the original count and",
+        "wiki_5428": " a form of anti-imperialism .\n\nBased on that paragraph can we conclude that this sentence is true?\nDu Fu was not a writer\n\nPick your answer from:\n (a). yes\n (b). no\n(a)."
+      }
+    }
+  }
+}

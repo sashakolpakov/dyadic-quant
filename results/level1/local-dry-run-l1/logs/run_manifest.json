@@ -1,0 +1,18 @@
+{
+  "run_id": "local-dry-run-l1",
+  "level": "1",
+  "quick": true,
+  "threads": 10,
+  "bits": [
+    4,
+    5,
+    6,
+    8
+  ],
+  "level1_dir": "results/level1/local-dry-run-l1",
+  "level2_dir": "results/level2/local-dry-run-l1",
+  "model_dir": "data/checkpoints/Qwen2.5-0.5B-Instruct",
+  "data_dir": "data/llm_eval",
+  "resnet_data_root": "data/datasets/imagenette2-160",
+  "resnet_checkpoint": "data/checkpoints/resnet18-f37072fd.pth"
+}

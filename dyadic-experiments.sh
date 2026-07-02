@@ -9,8 +9,6 @@ RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 RESULTS_ROOT="results"
 MODEL_DIR="data/checkpoints/Qwen2.5-0.5B-Instruct"
 DATA_DIR="data/llm_eval"
-RESNET_DATA_ROOT="data/datasets/imagenette2-160"
-RESNET_CHECKPOINT="data/checkpoints/resnet18-f37072fd.pth"
 BITS=(4 5 6 8)
 THREADS="${DYOP_CPU_THREADS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 PREPARE_DATA=1
@@ -26,13 +24,9 @@ JUDGE_MODEL="${DYADIC_JUDGE_MODEL:-gemma3:4b}"
 JUDGE_TIMEOUT=180
 JUDGE_BATCH_SIZE=1
 LEVEL1_GENERATIONS=""
-LEVEL2_RESNET=0
 AUDIT_STRICT=0
 MIN_QWEN_AGREEMENT=""
 MAX_QWEN_PERPLEXITY_RATIO=""
-MIN_RESNET_LOGIT_COSINE=""
-MIN_RESNET_REFERENCE_AGREEMENT=""
-MAX_RESNET_TOP1_DROP=""
 QUICK=0
 DRY_RUN=0
 PYTHON_BIN="${PYTHON:-python3}"
@@ -51,8 +45,6 @@ Options:
   --results-root DIR           Root containing level1/ and level2/ (default: results).
   --model-dir DIR              Local Qwen checkpoint directory.
   --data-dir DIR               Local LLM eval data directory.
-  --resnet-data-root DIR       Imagenette root containing val/.
-  --resnet-checkpoint FILE     ResNet18 checkpoint.
   --bits "4 5 6 8"             Bit depths to evaluate.
   --threads N                  Native dyop worker threads.
   --no-prepare-data            Do not download missing public checkpoints/datasets.
@@ -69,16 +61,10 @@ Options:
   --judge-batch-size N         Variants per judge call.
   --no-judge                   Compute lexical/cosine metrics without judge calls.
   --level1-generations FILE    Level 1 generations file used to seed Level 2 text.
-  --include-level2-resnet      Also run Level 2 ResNet/convnet evidence.
   --strict-audit               Exit nonzero when the native evidence audit has issues.
   --min-qwen-agreement VALUE   Audit threshold for next-token agreement.
   --max-qwen-perplexity-ratio VALUE
                                Audit threshold relative to source perplexity.
-  --min-resnet-logit-cosine VALUE
-                               Audit threshold for ResNet logit cosine.
-  --min-resnet-reference-agreement VALUE
-                               Audit threshold for ResNet reference agreement.
-  --max-resnet-top1-drop VALUE Audit threshold relative to source top-1 accuracy.
   --quick                      Small smoke-sized run.
   --dry-run                    Print commands without executing them.
   -h, --help                   Show this help.
@@ -118,14 +104,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --data-dir)
       DATA_DIR="$2"
-      shift 2
-      ;;
-    --resnet-data-root)
-      RESNET_DATA_ROOT="$2"
-      shift 2
-      ;;
-    --resnet-checkpoint)
-      RESNET_CHECKPOINT="$2"
       shift 2
       ;;
     --bits)
@@ -188,10 +166,6 @@ while [[ $# -gt 0 ]]; do
       LEVEL1_GENERATIONS="$2"
       shift 2
       ;;
-    --include-level2-resnet)
-      LEVEL2_RESNET=1
-      shift
-      ;;
     --strict-audit)
       AUDIT_STRICT=1
       shift
@@ -202,18 +176,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --max-qwen-perplexity-ratio)
       MAX_QWEN_PERPLEXITY_RATIO="$2"
-      shift 2
-      ;;
-    --min-resnet-logit-cosine)
-      MIN_RESNET_LOGIT_COSINE="$2"
-      shift 2
-      ;;
-    --min-resnet-reference-agreement)
-      MIN_RESNET_REFERENCE_AGREEMENT="$2"
-      shift 2
-      ;;
-    --max-resnet-top1-drop)
-      MAX_RESNET_TOP1_DROP="$2"
       shift 2
       ;;
     --quick)
@@ -262,41 +224,20 @@ QWEN_MAX_TOKENS=8192
 QWEN_SEQUENCE_LENGTH=256
 QWEN_ARC_LIMIT=100
 QWEN_WARMUP_REPEATS=2
-RESNET_BATCH_SIZE=64
-RESNET_WORKERS=4
-RESNET_LATENCY_REPEATS=30
-RESNET_LIMIT_ARGS=()
-LEVEL2_RESNET_BATCH_SIZE=8
-LEVEL2_RESNET_LIMIT_ARGS=()
-if [[ -n "${DYADIC_RESNET_THREADS:-}" ]]; then
-  LEVEL2_RESNET_THREADS="$DYADIC_RESNET_THREADS"
-elif (( THREADS < 16 )); then
-  LEVEL2_RESNET_THREADS="$THREADS"
-else
-  LEVEL2_RESNET_THREADS=16
-fi
 KERNEL_REPEATS=50
 TEXT_ARC_COUNT=20
 TEXT_WIKITEXT_COUNT=10
 TEXT_MAX_NEW_TOKENS=128
-AUDIT_MIN_RESNET_IMAGES=500
 
 if [[ "$QUICK" == "1" ]]; then
   QWEN_MAX_TOKENS=1024
   QWEN_SEQUENCE_LENGTH=128
   QWEN_ARC_LIMIT=20
   QWEN_WARMUP_REPEATS=0
-  RESNET_BATCH_SIZE=8
-  RESNET_WORKERS=0
-  RESNET_LATENCY_REPEATS=1
-  RESNET_LIMIT_ARGS=(--per-class-limit 5)
-  LEVEL2_RESNET_BATCH_SIZE=8
-  LEVEL2_RESNET_LIMIT_ARGS=(--per-class-limit 5)
   KERNEL_REPEATS=5
   TEXT_ARC_COUNT=1
   TEXT_WIKITEXT_COUNT=1
   TEXT_MAX_NEW_TOKENS=16
-  AUDIT_MIN_RESNET_IMAGES=50
 fi
 
 print_command() {
@@ -315,13 +256,6 @@ run_step() {
   fi
 }
 
-imagenette_has_images() {
-  [[ -d "$RESNET_DATA_ROOT/val" ]] || return 1
-  find "$RESNET_DATA_ROOT/val" -type f \
-    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
-    -print -quit | grep -q .
-}
-
 prepare_data() {
   if [[ "$PREPARE_DATA" == "0" ]]; then
     echo "Data preparation disabled by request."
@@ -331,23 +265,6 @@ prepare_data() {
     run_step prepare_qwen_checkpoint \
       "$PYTHON_BIN" -c 'from huggingface_hub import snapshot_download; import sys; snapshot_download("Qwen/Qwen2.5-0.5B-Instruct", local_dir=sys.argv[1], allow_patterns=["*.json", "*.safetensors", "tokenizer.*", "merges.txt", "vocab.json"])' \
         "$MODEL_DIR"
-  fi
-  if [[ ! -f "$RESNET_CHECKPOINT" ]]; then
-    mkdir -p "$(dirname "$RESNET_CHECKPOINT")"
-    run_step prepare_resnet_checkpoint \
-      "$PYTHON_BIN" -c 'import pathlib, sys, urllib.request; path=pathlib.Path(sys.argv[1]); path.parent.mkdir(parents=True, exist_ok=True); urllib.request.urlretrieve("https://download.pytorch.org/models/resnet18-f37072fd.pth", path)' \
-        "$RESNET_CHECKPOINT"
-  fi
-  if ! imagenette_has_images; then
-    mkdir -p "$(dirname "$RESNET_DATA_ROOT")"
-    local archive
-    archive="$(dirname "$RESNET_DATA_ROOT")/imagenette2-160.tgz"
-    if [[ ! -f "$archive" ]]; then
-      run_step prepare_imagenette_download \
-        "$PYTHON_BIN" -c 'import pathlib, sys, urllib.request; path=pathlib.Path(sys.argv[1]); path.parent.mkdir(parents=True, exist_ok=True); urllib.request.urlretrieve("https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-160.tgz", path)' \
-          "$archive"
-    fi
-    run_step prepare_imagenette_extract tar -xzf "$archive" -C "$(dirname "$RESNET_DATA_ROOT")"
   fi
   if [[ ! -f "$DATA_DIR/wikitext2_test.txt" || ! -f "$DATA_DIR/arc_easy.json" ]]; then
     echo "Missing LLM eval files in $DATA_DIR; copy wikitext2_test.txt and arc_easy.json or pass --data-dir." >&2
@@ -363,9 +280,6 @@ record_environment() {
     echo "run_id=$RUN_ID"
     echo "level=$LEVEL"
     echo "threads=$THREADS"
-    echo "level2_resnet_threads=$LEVEL2_RESNET_THREADS"
-    echo "level2_resnet_batch_size=$LEVEL2_RESNET_BATCH_SIZE"
-    echo "level2_resnet=$LEVEL2_RESNET"
     echo "bits=${BITS[*]}"
     command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi || true
     command -v lscpu >/dev/null 2>&1 && lscpu || true
@@ -562,7 +476,7 @@ run_level2_textual() {
 
 run_level1() {
   local out="$LEVEL1_DIR"
-  mkdir -p "$out/qwen" "$out/resnet"
+  mkdir -p "$out/qwen"
   maybe_run_ollama "$out" "level1"
   run_step level1_qwen_materialized_gpu \
     "$PYTHON_BIN" experiments/level1/run_qwen_dyadic.py \
@@ -576,16 +490,6 @@ run_level1() {
       --skip-generation \
       --variant-name qwen25_level1_materialized_gpu \
       --output-dir "$out/qwen"
-  run_step level1_resnet_materialized_gpu \
-    "$PYTHON_BIN" experiments/level1/run_resnet18_dyadic.py \
-      --data-root "$RESNET_DATA_ROOT" \
-      --checkpoint "$RESNET_CHECKPOINT" \
-      --bits "${BITS[@]}" \
-      --batch-size "$RESNET_BATCH_SIZE" \
-      --workers "$RESNET_WORKERS" \
-      --latency-repeats "$RESNET_LATENCY_REPEATS" \
-      "${RESNET_LIMIT_ARGS[@]}" \
-      --output-dir "$out/resnet"
   if textual_available; then
     run_level1_textual
   fi
@@ -593,7 +497,7 @@ run_level1() {
 
 run_level2() {
   local out="$LEVEL2_DIR"
-  mkdir -p "$out/qwen_native" "$out/resnet_native" "$out/kernels"
+  mkdir -p "$out/qwen_native" "$out/kernels"
   maybe_run_ollama "$out" "level2"
   run_step level2_build_native_cpu \
     "$PYTHON_BIN" experiments/level2/build_native_cpu.py --force
@@ -607,17 +511,6 @@ run_level2() {
       --embedding-dyop-threads 1 \
       --ops linear embedding \
       --output "$out/kernels/qwen_native_kernels.csv"
-  if [[ "$LEVEL2_RESNET" == "1" ]]; then
-    run_step level2_resnet_native_kernels \
-      env DYOP_CPU_THREADS="$THREADS" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-      "$PYTHON_BIN" experiments/level2/benchmark_native_conv2d.py \
-        --bits 6 \
-        --repeats "$KERNEL_REPEATS" \
-        --warmup 2 \
-        --torch-threads 1 \
-        --dyop-threads "$THREADS" \
-        --output "$out/kernels/resnet_native_conv2d.csv"
-  fi
   run_step level2_qwen_native_cpu \
     env DYOP_CPU_THREADS="$THREADS" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
     "$PYTHON_BIN" experiments/level1/run_qwen_dyadic.py \
@@ -636,24 +529,6 @@ run_level2() {
       --variant-name qwen25_level2_native_cpu \
       --save-dyadic "$out/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
       --output-dir "$out/qwen_native"
-  if [[ "$LEVEL2_RESNET" == "1" ]]; then
-    run_step level2_resnet_native_cpu \
-      env DYOP_CPU_THREADS="$LEVEL2_RESNET_THREADS" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-      "$PYTHON_BIN" experiments/level1/run_resnet18_dyadic.py \
-        --data-root "$RESNET_DATA_ROOT" \
-        --checkpoint "$RESNET_CHECKPOINT" \
-        --bits "${BITS[@]}" \
-        --batch-size "$LEVEL2_RESNET_BATCH_SIZE" \
-        --workers 0 \
-        --latency-repeats "$RESNET_LATENCY_REPEATS" \
-        "${LEVEL2_RESNET_LIMIT_ARGS[@]}" \
-        --execution-backend level2-native \
-        --level2-linear-backend native-cpu \
-        --level2-conv-backend native-cpu \
-        --level2-spatial-backend torch \
-        --skip-speed-gate-check \
-        --output-dir "$out/resnet_native"
-  fi
   if textual_available; then
     run_level2_textual
   fi
@@ -661,12 +536,8 @@ run_level2() {
     "$PYTHON_BIN" experiments/level2/audit_native_evidence.py
     --level2-dir "$out"
     --level1-dir "$LEVEL1_DIR"
-    --min-resnet-images "$AUDIT_MIN_RESNET_IMAGES"
     --output-dir "$out/evidence"
   )
-  if [[ "$LEVEL2_RESNET" != "1" ]]; then
-    audit+=(--skip-resnet)
-  fi
   if [[ "$AUDIT_STRICT" == "1" ]]; then
     audit+=(--strict)
   fi
@@ -675,15 +546,6 @@ run_level2() {
   fi
   if [[ -n "$MAX_QWEN_PERPLEXITY_RATIO" ]]; then
     audit+=(--max-qwen-perplexity-ratio "$MAX_QWEN_PERPLEXITY_RATIO")
-  fi
-  if [[ -n "$MIN_RESNET_LOGIT_COSINE" ]]; then
-    audit+=(--min-resnet-logit-cosine "$MIN_RESNET_LOGIT_COSINE")
-  fi
-  if [[ -n "$MIN_RESNET_REFERENCE_AGREEMENT" ]]; then
-    audit+=(--min-resnet-reference-agreement "$MIN_RESNET_REFERENCE_AGREEMENT")
-  fi
-  if [[ -n "$MAX_RESNET_TOP1_DROP" ]]; then
-    audit+=(--max-resnet-top1-drop "$MAX_RESNET_TOP1_DROP")
   fi
   run_step level2_native_evidence_audit "${audit[@]}"
 }
@@ -698,27 +560,16 @@ payload = {
     "level": "$LEVEL",
     "quick": bool(int("$QUICK")),
     "threads": int("$THREADS"),
-    "level2_resnet": bool(int("$LEVEL2_RESNET")),
-    "level2_resnet_threads": int("$LEVEL2_RESNET_THREADS"),
     "bits": [int(x) for x in "${BITS[*]}".split()],
     "prepare_data": bool(int("$PREPARE_DATA")),
     "level1_dir": "$LEVEL1_DIR",
     "level2_dir": "$LEVEL2_DIR",
     "model_dir": "$MODEL_DIR",
     "data_dir": "$DATA_DIR",
-    "resnet_data_root": "$RESNET_DATA_ROOT",
-    "resnet_checkpoint": "$RESNET_CHECKPOINT",
-    "level2_resnet_batch_size": int("$LEVEL2_RESNET_BATCH_SIZE"),
-    "level1_resnet_limit_args": "${RESNET_LIMIT_ARGS[*]}",
-    "level2_resnet_limit_args": "${LEVEL2_RESNET_LIMIT_ARGS[*]}",
-    "audit_min_resnet_images": int("$AUDIT_MIN_RESNET_IMAGES"),
     "audit_strict": bool(int("$AUDIT_STRICT")),
     "audit_thresholds": {
         "min_qwen_agreement": "$MIN_QWEN_AGREEMENT" or None,
         "max_qwen_perplexity_ratio": "$MAX_QWEN_PERPLEXITY_RATIO" or None,
-        "min_resnet_logit_cosine": "$MIN_RESNET_LOGIT_COSINE" or None,
-        "min_resnet_reference_agreement": "$MIN_RESNET_REFERENCE_AGREEMENT" or None,
-        "max_resnet_top1_drop": "$MAX_RESNET_TOP1_DROP" or None,
     },
     "skip_textual": bool(int("$SKIP_TEXTUAL")),
     "require_textual": bool(int("$REQUIRE_TEXTUAL")),

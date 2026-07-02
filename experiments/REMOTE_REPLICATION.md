@@ -1,7 +1,7 @@
-# Remote Replication Runner
+# Remote LLM Replication Runner
 
-Use this on the A10 host to run Level 1 GPU materialized baselines and Level 2
-native CPU dyop experiments with one command. Outputs remain separated:
+Use this on the A10 host to run the Qwen Level 1 materialized baseline and
+Level 2 native CPU dyop LLM evidence with one command. Outputs remain separated:
 
 - `results/level1/<run-id>/`
 - `results/level2/<run-id>/`
@@ -14,12 +14,14 @@ For Level 2 runs, inspect:
 ```text
 results/level2/<run-id>/evidence/native_evidence_audit.json
 results/level2/<run-id>/evidence/native_evidence_audit.md
+results/level2/<run-id>/evidence/qwen_native_evidence.csv
+results/level2/<run-id>/evidence/qwen_kernel_evidence.csv
 ```
 
-Those files summarize Qwen memory/quality, Qwen textual cosine/judge metrics,
-ResNet memory/logit/accuracy metrics, ResNet per-class metrics, and native
-kernel speed rows. The audit is informational by default, so the bundle is still
-created when a metric is weak or missing.
+The audit summarizes Qwen memory, perplexity, next-token agreement, ARC
+accuracy, textual cosine/judge metrics when enabled, and native kernel speed
+rows. The audit is informational by default, so the bundle is still created when
+a metric is weak or missing.
 
 To make the audit fail the Docker run when a quality threshold is missed, add
 `--strict-audit` with explicit cutoffs:
@@ -31,10 +33,7 @@ docker run --gpus all --ipc=host --rm \
   -v dyadic-ollama:/root/.ollama \
   dyadic-experiments --level all --threads 30 --strict-audit \
     --min-qwen-agreement 0.80 \
-    --max-qwen-perplexity-ratio 1.20 \
-    --min-resnet-logit-cosine 0.98 \
-    --min-resnet-reference-agreement 0.90 \
-    --max-resnet-top1-drop 0.03
+    --max-qwen-perplexity-ratio 1.20
 ```
 
 ## Build
@@ -47,16 +46,12 @@ The image includes Ollama. The entrypoint starts `ollama serve`, pulls the
 models needed by the requested command, and then runs `dyadic-experiments.sh`.
 Mount `/root/.ollama` as a Docker volume so model pulls are reused.
 
-The runner also prepares missing public assets by default:
-
-- Qwen2.5-0.5B-Instruct from Hugging Face;
-- ResNet18 checkpoint from PyTorch;
-- Imagenette2-160 from the fast.ai public bucket.
-
-Keep `data/` mounted read-write for this. Add `--no-prepare-data` when the
-remote data directory is already complete and should not be modified. The small
-LLM eval files `wikitext2_test.txt` and `arc_easy.json` are still expected under
-`data/llm_eval` or the directory passed with `--data-dir`.
+The runner prepares the Qwen2.5-0.5B-Instruct checkpoint from Hugging Face when
+it is missing. Keep `data/` mounted read-write for this. Add
+`--no-prepare-data` when the remote data directory is already complete and
+should not be modified. The small LLM eval files `wikitext2_test.txt` and
+`arc_easy.json` are still expected under `data/llm_eval` or the directory passed
+with `--data-dir`.
 
 ## Run Level 1
 
@@ -136,10 +131,4 @@ These only validate wiring and command construction:
 ```bash
 bash dyadic-experiments.sh --level 1 --quick --skip-ollama --dry-run
 bash dyadic-experiments.sh --level 2 --quick --skip-ollama --dry-run
-```
-
-For a real short run on a prepared machine:
-
-```bash
-./dyadic-experiments.sh --level all --quick --threads 30
 ```

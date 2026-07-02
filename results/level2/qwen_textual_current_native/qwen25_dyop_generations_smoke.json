@@ -1,0 +1,42 @@
+{
+  "prompts": {
+    "arc": [
+      {
+        "id": "Mercury_417466",
+        "prompt": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nAnswer the following multiple-choice question. State the correct option and briefly explain why.\nQuestion: Which statement best explains why photosynthesis is the foundation of most food webs?\nA. Sunlight is the source of energy for nearly all ecosystems.\nB. Most ecosystems are found on land instead of in water.\nC. Carbon dioxide is more available than other gases.\nD. The producers in all ecosystems are plants.<|im_end|>\n<|im_start|>assistant\n"
+      }
+    ],
+    "wikitext": [
+      {
+        "id": "wiki_0",
+        "prompt": " = Robert Boulter = \n\n\n Robert Boulter is an English film , television and theatre actor . He had a guest @-@ starring role on the television series The Bill in 2000 . This was followed by a"
+      }
+    ]
+  },
+  "generations": {
+    "float32_source": {
+      "arc": {
+        "Mercury_417466": "The correct answer is D. The producers in all ecosystems are plants.\n\nExplanation:\n"
+      },
+      "wikitext": {
+        "wiki_0": " guest @-@ starring role on the BBC drama series The Young Vic in "
+      }
+    },
+    "dyop_native_current_6": {
+      "arc": {
+        "Mercury_417466": "The correct answer is D. The producers in all ecosystems are plants.\n\nExplanation:\n"
+      },
+      "wikitext": {
+        "wiki_0": " guest @-@ starring role on the BBC drama series The Crown in 2"
+      }
+    },
+    "dyop_native_current_8": {
+      "arc": {
+        "Mercury_417466": "The correct answer is D. The producers in all ecosystems are plants.\n\nExplanation:\n"
+      },
+      "wikitext": {
+        "wiki_0": " guest @-@ starring role on the BBC drama series The Young Vic in "
+      }
+    }
+  }
+}

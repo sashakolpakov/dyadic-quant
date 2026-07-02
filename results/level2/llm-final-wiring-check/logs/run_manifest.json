@@ -1,0 +1,28 @@
+{
+  "run_id": "llm-final-wiring-check",
+  "level": "all",
+  "quick": true,
+  "threads": 10,
+  "bits": [
+    4,
+    5,
+    6,
+    8
+  ],
+  "prepare_data": true,
+  "level1_dir": "results/level1/llm-final-wiring-check",
+  "level2_dir": "results/level2/llm-final-wiring-check",
+  "model_dir": "data/checkpoints/Qwen2.5-0.5B-Instruct",
+  "data_dir": "data/llm_eval",
+  "audit_strict": false,
+  "audit_thresholds": {
+    "min_qwen_agreement": null,
+    "max_qwen_perplexity_ratio": null
+  },
+  "skip_textual": false,
+  "require_textual": false,
+  "embed_model": "nomic-embed-text",
+  "judge_backend": "ollama",
+  "judge_model": "gemma3:4b",
+  "no_judge": false
+}

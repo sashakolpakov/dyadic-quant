@@ -1,0 +1,35 @@
+{
+  "status": {
+    "passes": false,
+    "strict": false
+  },
+  "issues": [
+    "missing qwen textual summary"
+  ],
+  "inputs": {
+    "level2_dir": "results/level2/remote-level2-llm-repro-smoke",
+    "level1_dir": null,
+    "qwen_results": "results/level2/remote-level2-llm-repro-smoke/qwen_native/qwen25_level2_native_cpu_results.csv",
+    "textual_summary": null,
+    "textual_comparison": null,
+    "qwen_kernels": "results/level2/remote-level2-llm-repro-smoke/kernels/qwen_native_kernels.csv",
+    "textual_audit": null
+  },
+  "requested_bits": [
+    4,
+    5,
+    6,
+    8
+  ],
+  "thresholds": {
+    "min_qwen_agreement": null,
+    "max_qwen_perplexity_ratio": null
+  },
+  "textual": {},
+  "outputs": {
+    "qwen": "results/level2/remote-level2-llm-repro-smoke/evidence/qwen_native_evidence.csv",
+    "textual": "results/level2/remote-level2-llm-repro-smoke/evidence/qwen_textual_native_evidence.csv",
+    "qwen_kernels": "results/level2/remote-level2-llm-repro-smoke/evidence/qwen_kernel_evidence.csv",
+    "markdown": "results/level2/remote-level2-llm-repro-smoke/evidence/native_evidence_audit.md"
+  }
+}
