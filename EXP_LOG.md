@@ -32,18 +32,22 @@ project.
 
 For p-adic integers,
 
-\[
-\mathbb Z_p/p^N\mathbb Z_p \cong \mathbb Z/p^N\mathbb Z.
-\]
+
+```math
+\mathbb{Z}_p/p^N\mathbb{Z}_p \cong \mathbb{Z}/p^N\mathbb{Z}.
+```
+
 
 Keeping `N` places therefore gives `p^N` states and requires
 `N log2(p)` information bits. Addition and multiplication are modular.
 
 For `p = 2`, reduction is particularly cheap:
 
-\[
-x \bmod 2^N = x\ \&\ (2^N-1).
-\]
+
+```math
+x \bmod 2^N = x \mathbin{\&} (2^N - 1).
+```
+
 
 Fixed-width binary overflow already implements this operation. The earlier
 NumPy slowdown was not evidence against this hardware advantage: it measured
@@ -54,9 +58,11 @@ packed integer kernels.
 
 A p-adic expansion is
 
-\[
+
+```math
 x=\sum_{k=0}^{\infty}a_kp^k.
-\]
+```
+
 
 Adding places in this order normally increases integer range. It does not reduce
 the real-valued quantization step. Moreover, p-adic closeness and real closeness
@@ -70,27 +76,35 @@ real approximation.
 
 The standard number-theoretic bridge is the Monna map. For
 
-\[
-x=\sum_{k=0}^{\infty}a_kp^k\in\mathbb Z_p,
-\]
+
+```math
+x=\sum_{k=0}^{\infty}a_kp^k\in\mathbb{Z}_p,
+```
+
 
 reverse digit significance:
 
-\[
+
+```math
 M_p(x)=\sum_{k=0}^{\infty}a_kp^{-k-1}.
-\]
+```
+
 
 For `p = 2`, the prefix
 
-\[
+
+```math
 M_{2,N}(x)=\sum_{k=0}^{N-1}a_k2^{-k-1}
-\]
+```
+
 
 satisfies
 
-\[
-|M_2(x)-M_{2,N}(x)|\le 2^{-N}.
-\]
+
+```math
+|M_2(x)-M_{2,N}(x)|\leq 2^{-N}.
+```
+
 
 Each newly loaded digit therefore improves real precision. This supplies the
 missing decoding rule, but it does not preserve arithmetic.
@@ -99,9 +113,11 @@ missing decoding rule, but it does not preserve arithmetic.
 
 In general,
 
-\[
-M(x+y)\ne M(x)+M(y),\qquad M(xy)\ne M(x)M(y).
-\]
+
+```math
+M(x+y)\neq M(x)+M(y),\qquad M(xy)\neq M(x)M(y).
+```
+
 
 There is a structural obstruction: no nonzero continuous unital ring
 homomorphism exists from `Z_2` to `R`. The additive image of compact `Z_2`
@@ -125,11 +141,11 @@ Two practical constructions were selected.
 
 For layer scale `alpha`,
 
-\[
-w_N=\operatorname{sign}(w)\,\alpha
-\sum_{k=1}^{N-1}a_k2^{-k},
-\qquad a_k\in\{0,1\}.
-\]
+
+```math
+w_N=\mathrm{sign}(w)\,\alpha \sum_{k=1}^{N-1}a_k2^{-k}, \qquad a_k\in\{0,1\}.
+```
+
 
 One sign bit and `N-1` magnitude planes use exactly `N` bits per weight. Prefixes
 are nested, and magnitude error decreases as planes are added. The first useful
@@ -138,10 +154,11 @@ implementation.
 
 The matrix operation can be decomposed as
 
-\[
-W_Nx=\sum_{k=1}^{N-1}\alpha2^{-k}
-\left(S\odot B_k\right)x,
-\]
+
+```math
+W_Nx=\sum_{k=1}^{N-1}\alpha2^{-k} \left(S\odot B_k\right)x,
+```
+
 
 where `S` is the sign matrix and `B_k` is a binary magnitude plane. Zero bits
 can be skipped and powers of two become shifts in fixed-point implementations.
@@ -150,19 +167,19 @@ can be skipped and powers of two become shifts in fixed-point implementations.
 
 Construct one bipolar plane at a time:
 
-\[
-R_0=W,\quad
-\alpha_k=\operatorname{mean}|R_k|,\quad
-B_k=\operatorname{sign}(R_k),\quad
-R_{k+1}=R_k-\alpha_kB_k.
-\]
+
+```math
+R_0=W,\quad \alpha_k=\mathrm{mean}|R_k|,\quad B_k=\mathrm{sign}(R_k),\quad R_{k+1}=R_k-\alpha_kB_k.
+```
+
 
 Then
 
-\[
-W_N=\sum_{k=0}^{N-1}\alpha_kB_k,
-\qquad B_k\in\{-1,+1\}.
-\]
+
+```math
+W_N=\sum_{k=0}^{N-1}\alpha_kB_k, \qquad B_k\in\{-1,+1\}.
+```
+
 
 This is nested and uses one payload bit per weight per new plane. It is not a
 strict power-of-two expansion because the fitted coefficients `alpha_k` are
@@ -420,28 +437,28 @@ dyadic planes when output channels have very different weight ranges. The
 large-model implementation therefore uses one signed power-of-two exponent per
 output channel:
 
-\[
+
+```math
 \Delta_c = 2^{e_c}.
-\]
+```
+
 
 At maximum depth `B`, a weight is represented by a sign and an unsigned
 magnitude code:
 
-\[
-w_{c,i}\approx
-\operatorname{sign}(w_{c,i})
-\Delta_c\left(q_{c,i}+\tfrac12\right).
-\]
+
+```math
+w_{c,i}\approx \mathrm{sign}(w_{c,i}) \Delta_c\left(q_{c,i}+\frac{1}{2}\right).
+```
+
 
 The `b`-bit prefix is obtained without re-encoding:
 
-\[
-q_{c,i}^{(b)} =
-q_{c,i}^{(B)} \gg (B-b),
-\qquad
-\Delta_c^{(b)} =
-2^{e_c+B-b}.
-\]
+
+```math
+q_{c,i}^{(b)} = q_{c,i}^{(B)} \gg (B-b), \qquad \Delta_c^{(b)} = 2^{e_c+B-b}.
+```
+
 
 The midpoint term decodes the dyadic interval represented by a prefix at its
 center. Lower-edge decoding introduced a systematic shrinkage bias that
@@ -526,7 +543,7 @@ verified:
 - all ten Imagenette WordNet IDs map to the correct ImageNet output indices;
 - all 3,925 validation images are included;
 - in FP32 on CPU, Conv–BatchNorm fusion changes random-batch logits by about
-  \(10^{-5}\) or less and preserved all predictions in the structural check;
+  $10^{-5}$ or less and preserved all predictions in the structural check;
 - on the complete FP16/MPS validation run, the fused and unfused graphs had
   identical 66.8535% top-1 accuracy, 99.9236% prediction agreement, and
   0.00478 mean absolute logit difference. The three differing predictions
@@ -555,17 +572,19 @@ normalized-regret algorithm and must not be used to describe it.
 One shared exponent is required if every precision is to be a prefix of the
 same stored code. A first implementation selected it by minimizing
 
-\[
+
+```math
 \sum_{b\in\{4,5,6,8\}} E_b(e),
-\]
+```
+
 
 where
 
-\[
-E_b(e)=
-\frac1n\sum_i
-\left(w_i-\hat w_{i,b}(e)\right)^2.
-\]
+
+```math
+E_b(e)= \frac1n\sum_i \left(w_i-\widehat{w}_{i,b}(e)\right)^2.
+```
+
 
 This objective is poorly scaled. Four-bit reconstruction error is naturally
 much larger than eight-bit error. It therefore dominated the sum and selected
@@ -581,25 +600,27 @@ perplexity. An early full Qwen run produced 8-bit perplexity 46.60 versus
 For each prefix, first find the best error attainable by any candidate
 exponent:
 
-\[
+
+```math
 E_b^{\min}=\min_e E_b(e).
-\]
+```
+
 
 Then define relative regret:
 
-\[
-R_b(e)=
-\frac{E_b(e)}
-{\max(E_b^{\min},\epsilon)}.
-\]
+
+```math
+R_b(e)= \frac{E_b(e)} {\max(E_b^{\min},\epsilon)}.
+```
+
 
 The shared exponent is selected by
 
-\[
-e^*=
-\arg\min_e
-\sum_{b\in\{4,5,6,8\}}R_b(e).
-\]
+
+```math
+e^*= \mathrm{arg\,min}_{e} \sum_{b\in\{4,5,6,8\}}R_b(e).
+```
+
 
 Each precision now has equal relative influence:
 
@@ -609,9 +630,11 @@ Each precision now has equal relative influence:
 
 This preserves the invariant
 
-\[
+
+```math
 q^{(b)}=q^{(B)}\gg(B-b)
-\]
+```
+
 
 while avoiding the implicit preference for low-bit prefixes. On the final
 8,191-token Qwen evaluation, normalized regret reduced 8-bit perplexity from

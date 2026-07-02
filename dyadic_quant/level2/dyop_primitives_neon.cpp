@@ -562,34 +562,21 @@ static inline void make_indirect_window_tile(
                 int kk = 0;
                 for (int ic = 0; ic < s.IC; ++ic) {
                     const float* plane = input + ((static_cast<size_t>(b) * s.IC + ic) * s.IH + ih_base) * s.IW + iw_base;
-                    float32x4_t r0 = vld1q_f32(plane);
-                    float32x4_t r1 = vld1q_f32(plane + s.IW);
-                    float32x4_t r2 = vld1q_f32(plane + 2 * s.IW);
-                    float32x4_t r0b = vld1q_f32(plane + 4);
-                    float32x4_t r1b = vld1q_f32(plane + s.IW + 4);
-                    float32x4_t r2b = vld1q_f32(plane + 2 * s.IW + 4);
-                    float buf[18];
-                    vst1q_f32(buf, r0);
-                    vst1q_f32(buf + 4, r0b);
-                    vst1q_f32(buf + 8, r1);
-                    vst1q_f32(buf + 12, r1b);
-                    vst1q_f32(buf + 16, r2);
-                    // buf[0..5] = row0 columns iw_base..iw_base+5
-                    // buf[6..11] = row1
-                    // buf[12..17] = row2
-                    // Window m uses columns m, m+1, m+2 from each row
-                    int c0 = m;
-                    int c1 = m + 1;
-                    int c2 = m + 2;
-                    dst[kk++] = buf[c0];
-                    dst[kk++] = buf[c1];
-                    dst[kk++] = buf[c2];
-                    dst[kk++] = buf[6 + c0];
-                    dst[kk++] = buf[6 + c1];
-                    dst[kk++] = buf[6 + c2];
-                    dst[kk++] = buf[12 + c0];
-                    dst[kk++] = buf[12 + c1];
-                    dst[kk++] = buf[12 + c2];
+                    const float* r0 = plane;
+                    const float* r1 = plane + s.IW;
+                    const float* r2 = plane + 2 * s.IW;
+                    const int c0 = m;
+                    const int c1 = m + 1;
+                    const int c2 = m + 2;
+                    dst[kk++] = r0[c0];
+                    dst[kk++] = r0[c1];
+                    dst[kk++] = r0[c2];
+                    dst[kk++] = r1[c0];
+                    dst[kk++] = r1[c1];
+                    dst[kk++] = r1[c2];
+                    dst[kk++] = r2[c0];
+                    dst[kk++] = r2[c1];
+                    dst[kk++] = r2[c2];
                 }
             }
             for (int m = valid_m; m < MR; ++m)

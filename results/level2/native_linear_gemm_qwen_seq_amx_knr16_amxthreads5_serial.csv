@@ -1,0 +1,2 @@
+op,shape,bits,torch_materialized_ms,dyop_native_ms,speedup_vs_torch,max_abs_error
+linear,gemm_qwen_seq,6,0.0974208302795887,0.1481762481853366,0.6574658993777208,5.340576171875e-05

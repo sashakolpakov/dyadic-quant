@@ -1,0 +1,10 @@
+subkernel,shape,source,materialized_ms,dyop_native_ms,speedup_vs_materialized,passes_speed_gate,max_abs_error
+linear_gemm_qwen_seq,linear_gemm_qwen_seq,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.192396,0.349575,0.550371,False,
+linear_output_projection,linear_output_projection,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,10.843443,6.098166,1.778148,True,
+embedding_qwen_vocab_width,embedding_qwen_vocab_width,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.015501,0.005227,2.965518,True,
+resnet_conv3x3,resnet_conv3x3,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,3.93554,6.86127,0.573588,False,
+resnet_layer2_stride2_3x3,resnet_layer2_stride2_3x3,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.347237,0.425967,0.815174,False,
+resnet_layer3_stride2_3x3,resnet_layer3_stride2_3x3,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.262369,0.426108,0.615733,False,
+resnet_layer4_stride2_3x3,resnet_layer4_stride2_3x3,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.228865,0.476462,0.480342,False,
+resnet_downsample,resnet_downsample,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.265602,0.37235,0.713313,False,
+adaptive_avgpool2d_resnet_global,adaptive_avgpool2d_resnet_global,results/level2/arm64_neon_gate_results_after_fix_full_audit.csv,0.013332,0.002886,4.618918,True,

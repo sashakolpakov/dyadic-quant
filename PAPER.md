@@ -68,56 +68,54 @@ not packed execution speed.
 ### 2.1 One maximum-depth code, many prefixes
 
 Consider a weight tensor whose first dimension indexes output channels. For
-channel \(c\), choose an integer exponent \(e_c\) and define the finest dyadic
+channel $c$, choose an integer exponent $e_c$ and define the finest dyadic
 step
 
-\[
-\Delta_c = 2^{e_c}.
-\]
 
-Let \(B\) be the maximum stored width. Each weight is represented logically by
-one sign and a nonnegative magnitude code \(q_{c,i}^{(B)}\). At maximum depth,
+```math
+\Delta_c = 2^{e_c}.
+```
+
+
+Let $B$ be the maximum stored width. Each weight is represented logically by
+one sign and a nonnegative magnitude code $q_{c,i}^{(B)}$. At maximum depth,
 the midpoint reconstruction is
 
-\[
-\widehat w_{c,i}^{(B)}
-=
-s_{c,i}\Delta_c
-\left(q_{c,i}^{(B)}+\frac12\right),
-\qquad
-s_{c,i}\in\{-1,+1\}.
-\]
 
-For a shorter \(b\)-bit prefix, lower magnitude planes are discarded:
+```math
+\widehat w_{c,i}^{(B)} = s_{c,i}\Delta_c \left(q_{c,i}^{(B)}+\frac12\right), \qquad s_{c,i}\in\{-1,+1\}.
+```
 
-\[
-q_{c,i}^{(b)}
-=
-q_{c,i}^{(B)} \gg (B-b).
-\]
+
+For a shorter $b$-bit prefix, lower magnitude planes are discarded:
+
+
+```math
+q_{c,i}^{(b)} = q_{c,i}^{(B)} \gg (B-b).
+```
+
 
 The effective step grows accordingly:
 
-\[
-\Delta_c^{(b)}
-=
-2^{e_c+B-b}.
-\]
+
+```math
+\Delta_c^{(b)} = 2^{e_c+B-b}.
+```
+
 
 The corresponding reconstruction is
 
-\[
-\widehat w_{c,i}^{(b)}
-=
-s_{c,i}\Delta_c^{(b)}
-\left(q_{c,i}^{(b)}+\frac12\right).
-\]
+
+```math
+\widehat w_{c,i}^{(b)} = s_{c,i}\Delta_c^{(b)} \left(q_{c,i}^{(b)}+\frac12\right).
+```
+
 
 Thus the same stored code provides all requested precisions. Moving from
-\(b\) to \(b+1\) reveals one additional magnitude plane and divides every
+$b$ to $b+1$ reveals one additional magnitude plane and divides every
 current dyadic interval into two halves.
 
-The following diagram shows one weight stored at maximum depth \(B=8\) (one
+The following diagram shows one weight stored at maximum depth $B=8$ (one
 sign plane plus seven MSB-first magnitude planes), and how reading a prefix is
 simply dropping the low planes:
 
@@ -146,19 +144,23 @@ additional per-weight metadata.
 
 ### 2.2 Storage and refinement
 
-With packed storage, a \(b\)-bit model requires approximately
+With packed storage, a $b$-bit model requires approximately
 
-\[
+
+```math
 \frac{bN}{8}
-\]
+```
 
-bytes for \(N\) encoded weights, plus one small exponent per output channel
+
+bytes for $N$ encoded weights, plus one small exponent per output channel
 and any parameters intentionally left at higher precision. Increasing the
 prefix width by one requires exactly
 
-\[
+
+```math
 \left\lceil\frac{N}{8}\right\rceil
-\]
+```
+
 
 additional bytes.
 
@@ -188,15 +190,15 @@ information until later prefixes.
 
 ### 2.4 Scale granularity: the group size
 
-The exponent \(e\) is shared by a *group* of weights. It must be large enough
+The exponent $e$ is shared by a *group* of weights. It must be large enough
 that the largest-magnitude weight in the group is representable; but a step
-\(2^e\) large enough for an outlier is too coarse for the small weights that
+$2^e$ large enough for an outlier is too coarse for the small weights that
 share it, which then snap to a sparse grid. The number of weights sharing one
-exponent — the **group size** \(g\) — therefore directly controls the
+exponent — the **group size** $g$ — therefore directly controls the
 range-versus-resolution conflict.
 
-Per-channel scaling is the special case \(g = K\), where \(K\) is the number of
-weights in an output row. Reducing \(g\) gives each small block its own
+Per-channel scaling is the special case $g = K$, where $K$ is the number of
+weights in an output row. Reducing $g$ gives each small block its own
 exponent, so a single large weight only coarsens its own block instead of an
 entire row. This is the same locality that block quantizers such as the
 llama.cpp k-quants exploit with 16–32-element blocks.
@@ -225,33 +227,33 @@ empirically in Section 6.
 
 ### 3.1 The scale-conflict problem
 
-For a candidate exponent \(e\), define the channel reconstruction MSE at
-prefix width \(b\):
+For a candidate exponent $e$, define the channel reconstruction MSE at
+prefix width $b$:
 
-\[
-E_b(e)
-=
-\frac{1}{n_c}
-\sum_i
-\left(
-w_{c,i}-\widehat w_{c,i}^{(b)}(e)
-\right)^2.
-\]
+
+```math
+E_b(e) = \frac{1}{n_c} \sum_i \left( w_{c,i}-\widehat w_{c,i}^{(b)}(e) \right)^2.
+```
+
 
 If each width were encoded independently, it could use
 
-\[
+
+```math
 e_b^* = \arg\min_e E_b(e).
-\]
+```
+
 
 A progressive model cannot do this: all widths must share one exponent and
 one maximum-depth code. The first implementation minimized raw summed error,
 
-\[
-\arg\min_e \sum_{b\in\mathcal B}E_b(e),
-\]
 
-for \(\mathcal B=\{4,5,6,8\}\). This proved unsuitable because low-bit errors
+```math
+\arg\min_e \sum_{b\in\mathcal B}E_b(e),
+```
+
+
+for $\mathcal B=\{4,5,6,8\}$. This proved unsuitable because low-bit errors
 are naturally much larger than high-bit errors. Four-bit MSE dominated the
 objective and pulled the shared exponent toward the four-bit optimum, even
 when that choice was many times worse than the best eight-bit exponent.
@@ -264,29 +266,27 @@ against a 29.00 dequantized-Q4 reference in the initial setup.
 
 We instead normalize every prefix by its own best attainable error:
 
-\[
-E_b^{\min}
-=
-\min_e E_b(e).
-\]
 
-The relative regret of exponent \(e\) at width \(b\) is
+```math
+E_b^{\min} = \min_e E_b(e).
+```
 
-\[
-R_b(e)
-=
-\frac{E_b(e)}
-{\max(E_b^{\min},\epsilon)}.
-\]
+
+The relative regret of exponent $e$ at width $b$ is
+
+
+```math
+R_b(e) = \frac{E_b(e)} {\max(E_b^{\min},\epsilon)}.
+```
+
 
 The shared exponent is selected by
 
-\[
-e_c^*
-=
-\arg\min_e
-\sum_{b\in\mathcal B}R_b(e).
-\]
+
+```math
+e_c^* = \arg\min_e \sum_{b\in\mathcal B}R_b(e).
+```
+
 
 This objective gives each prefix comparable relative influence. A regret of
 one is optimal for that width; a regret of two means twice its independently
@@ -325,15 +325,11 @@ LLMs expose errors that may be hidden by classification accuracy. A vision
 classifier only needs the correct class to remain the largest logit. Language
 model perplexity evaluates the probability assigned to every target token:
 
-\[
-\operatorname{PPL}
-=
-\exp\left[
--\frac{1}{T}
-\sum_{t=1}^T
-\log p(x_t\mid x_{<t})
-\right].
-\]
+
+```math
+PPL = \exp \left( -\frac{1}{T} \sum_{t=1}^T \log p(x_t\mid x_{< t}) \right)
+```
+
 
 Small perturbations therefore accumulate across layers and thousands of token
 positions. Next-token agreement and perplexity are both reported because a
@@ -423,7 +419,7 @@ been 66.78%; with the current normalized-regret selector it is 65.86%, while
 eight-bit top-1 is 66.78%. The table in this paper corresponds to the current
 code. Fusion equivalence, class-index mapping, exact prefix nesting, exponent
 range, and two full-run metric repetitions were checked independently.
-In FP32, fusion changed checked logits only at about the \(10^{-5}\) level.
+In FP32, fusion changed checked logits only at about the $10^{-5}$ level.
 On the full FP16/MPS validation set, fused and unfused graphs had the same
 66.8535% top-1 accuracy, while agreeing on 99.9236% of predictions with
 0.00478 logit MAE. Thus the reported reference is specifically the fused FP16

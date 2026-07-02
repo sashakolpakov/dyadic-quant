@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,arm64_amx_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,op_tree
+embedding_qwen_vocab_width,0.015501,0.005334,2.906210,8,true,true,"persistent_spin_workers -> gather_row -> neon_i16_to_f32 -> apply_row_scale -> streaming_writeback"

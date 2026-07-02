@@ -79,7 +79,12 @@ def add_fixed_gate_rows(
     for row in rows:
         subkernel = row["subkernel"]
         materialized = float(row["materialized_gate_ms"])
-        native = float(row.get("arm64_neon_ms") or row.get("x86_native_ms"))
+        native = float(
+            row.get("arm64_native_ms")
+            or row.get("arm64_neon_ms")
+            or row.get("arm64_amx_ms")
+            or row.get("x86_native_ms")
+        )
         speedup = float(row.get("speedup_vs_arm64_gate") or row.get("speedup_vs_arm_gate"))
         summary.append(
             {

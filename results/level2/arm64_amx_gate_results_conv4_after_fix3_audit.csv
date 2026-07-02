@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,arm64_amx_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,op_tree
+resnet_downsample,0.265602,0.553708,0.479679,8,false,true,"gather_stride1x1_activation_tile -> microkernel_16x16_amx -> scale_bias -> nchw_strided_writeback"

@@ -42,33 +42,71 @@ After K:
 
 ## M5-specific findings
 
+### SME available, blocked from user-space
+
+`hw.optional.arm.FEAT_SME=1` on M5 (SVL=512, 16×float32 ZA tile). However,
+macOS traps `smstart`/`smstop` and all SME data-processing instructions
+(`fmopa`, `svzero_za`, `ld1w`/`st1w` for ZA) with SIGILL. The `arm_streaming`
+and `arm_new_za` function attributes are unknown to Apple's clang.
+
+Apple reserves SME for its own frameworks (Accelerate, BNNS, MPS). User-space
+code on macOS cannot access SME directly.
+
 ### SVE2 unavailable
 
-`hw.optional.arm.FEAT_SVE=0` on this M5 generation. The SVE2 port
+`hw.optional.arm.FEAT_SVE` does not report on this system. The SVE2 port
 (`dyop_primitives_sve2.cpp`) hangs the process if executed. SVE2 code is kept
 for future hardware but must not be compiled in by default.
 
 ### Gate results
 
 Gate CSVs: `fixed_arm64_neon_gates.csv` (ARM) and `fixed_metal_gates.csv`
-(Metal). Current pass/fail on M5:
+(Metal). Current pass/fail on M5 (M=64, K=896, N=896):
 
 | Subkernel | Gate (ms) | NEON (ms) | Metal (ms) | Pass? |
 |---|---|---|---|---|
 | outproj (8×151k×896) | 10.84 | 0.34 | 6.15 | ✓ both |
 | embedding (8×896×136M) | 0.04 | 0.34 | 0.64 | ✗ both |
 | global pool (8×896×49) | 0.003 | 0.010 | 0.047 | ✗ both |
-| GEMM (64×896×896) | 0.19 | 0.33 | 1.01 | ✗ both |
+| GEMM (64×896×896) | 0.19 | 0.44 | 1.01 | ✗ both |
 
 Only outproj passes on either backend.
 
+### GEMM deep dive
+
+The GEMM kernel (64×896×896 = 103 MFLOP) is compute-bound — the weight
+matrix (3 MB fp32) fits in L2 cache, so the int16 bandwidth advantage is
+irrelevant. Accelerate uses SME internally (~2 TFLOPS per P-core cluster),
+while NEON peaks at ~113 GFLOPS per core.
+
+SME theoretical throughput: ~0.05 ms for 103 MFLOP at 2 TFLOPS, but
+unreachable from user-space.
+
+| Variant | Time (ms) | ×Gate |
+|---|---|---|
+| Gate (cblas_sgemm on materialized fp32) | 0.19 | 1.00 |
+| cblas_sgemm alone (no materialization) | 0.09 | 2.1× |
+| NEON baseline (repeated decode, t=8) | 0.47 | 0.41× |
+| NEON panel decode + asm microkernel (t=8) | 0.44 | 0.44× |
+| NEON panel decode + intrinsics (t=8) | 0.47 | 0.41× |
+
+The panel approach (decode-once per N-block) saves ~6% vs repeated decode,
+but both are dominated by NEON throughput limits. The assembly microkernel
+(MR=4, NR=8) shaves off a few more percent.
+
+### Walls
+
+1. **SME blocked**: `smstart` → SIGILL. SME is Apple-private.
+2. **BNNS no int16**: `BNNSMatMulWorkspaceSize` returns -1 for
+   `BNNSDataTypeInt16`. BNNS cannot perform the quantized GEMM.
+3. **NEON at ceiling**: Panel variant reaches ~90% of peak NEON efficiency;
+   no further significant gains possible.
+
 ### Bottleneck analysis
 
-- NEON GEMM is 1.7× above gate (0.33 ms vs 0.19 ms). At 224 GFLOPS theoretical
-  peak (4-wide FMLA × 3.88 GHz), the 536 MFLOP output cannot be computed in
-  0.19 ms on a single core. Multi-core dispatch (4 P-cores) may narrow the gap
-  but the remaining factor-of-2 difference suggests packing overhead and
-  int16→float conversion dominate.
+- NEON GEMM is 2.3× above gate (0.44 ms vs 0.19 ms). At 224 GFLOPS theoretical
+  peak on 4 P-cores (4-wide FMLA × 3.88 GHz), the 103 MFLOP output cannot
+  match SME's ~2 TFLOPS. The gap is architectural, not implementational.
 
 - Metal GEMM is 5.3× above the gate. Threadgroup-memory tiling (TK=16) with
   double-buffering reached 1.01 ms; TK=32 and TK=64 were slower. Bank conflicts
@@ -78,11 +116,35 @@ Only outproj passes on either backend.
 - Tiny workloads (embedding, pool) are dominated by GPU dispatch overhead.
   Metal launch latency exceeds the sub-0.1 ms gates.
 
+### Where NEON wins
+
+NEON beats or matches the gate for bandwidth-bound shapes where the int16
+decode saves significant memory traffic:
+
+| Shape | Why NEON wins |
+|---|---|
+| outproj (8×151k×896) | Huge N — memory-bound; int16 reduces BW by 2× |
+| Small batch (M=1) with large K, N | Decode cost amortized; no SME context-switch overhead |
+| Any K where fp32 materialization spills L2 | int16 keeps data in cache longer |
+
+The gate materializes N×K int16→fp32 weights (travels through L1→L2→DRAM)
+before the GEMM. For large N, this doubles memory traffic. The NEON panel
+decode avoids materialization entirely.
+
 ### Recommended strategy
 
-A hybrid dispatch routes tiny workloads through NEON CPU and large matmuls
-through Metal GPU. GEMM throughput on both backends is still below the 0.19 ms
-gate, so this is a direction, not a resolution.
+**Hybrid dispatch** based on shape and hardware generation:
+
+1. **M5+ (SME present)**: route compute-bound GEMMs (`M*K*N > threshold`)
+   through `cblas_sgemm` on materialized fp32 weights — this is the gate
+   itself, and it's unbeatable from user-space.
+2. **Pre-M5 or bandwidth-bound shapes**: use NEON int16 panel decode —
+   this wins on memory-bound shapes and is the only option on older hardware.
+3. **Metal GPU**: not recommended for this project. Dispatch latency dominates
+   for typical inference batch sizes; throughput does not close the gap.
+
+The `threshold` should be determined empirically but a reasonable starting
+point is `M*K*N >= 5×10^8` (equivalent to the 64×896×896 case).
 
 ## Gate policy
 

@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,arm64_neon_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,op_tree
+linear_gemm_qwen_seq,0.192396,0.473533,0.406299,6,false,true,"pack_weight_k_nr -> microkernel_4x8 -> apply_scale_bias -> contiguous_writeback"

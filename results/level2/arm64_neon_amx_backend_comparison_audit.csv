@@ -1,0 +1,10 @@
+subkernel,materialized_gate_ms,arm64_native_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,selected_backend,op_tree,neon_ms,neon_speedup,neon_passes,amx_ms,amx_speedup,amx_passes
+linear_gemm_qwen_seq,0.192396,0.309208,0.622222,2,false,true,amx,pack_weight_k_nr -> microkernel_16x16_amx -> apply_scale_bias -> contiguous_writeback,0.349575,0.550371,false,0.309208,0.622222,false
+linear_output_projection,10.843443,6.098166,1.778148,8,true,true,neon,pack_weight_k_nr -> microkernel_4x8 -> apply_scale_bias -> contiguous_writeback,6.098166,1.778148,true,39.719250,0.273002,false
+embedding_qwen_vocab_width,0.015501,0.005227,2.965563,8,true,true,neon,persistent_spin_workers -> gather_row -> neon_i16_to_f32 -> apply_row_scale -> streaming_writeback,0.005227,2.965563,true,0.005334,2.906074,true
+resnet_conv3x3,3.935540,6.861270,0.573588,8,false,true,neon,make_indirect_window_tile_4xK -> microkernel_4x8 -> scale_bias -> nchw_strided_writeback,6.861270,0.573588,false,8.158250,0.482400,false
+resnet_layer2_stride2_3x3,0.347237,0.425967,0.815173,8,false,true,neon,make_indirect_window_tile_4xK -> microkernel_4x8 -> scale_bias -> nchw_strided_writeback,0.425967,0.815173,false,0.500542,0.693722,false
+resnet_layer3_stride2_3x3,0.262369,0.426108,0.615734,8,false,true,neon,make_indirect_window_tile_4xK -> microkernel_4x8 -> scale_bias -> nchw_strided_writeback,0.426108,0.615734,false,0.542354,0.483760,false
+resnet_layer4_stride2_3x3,0.228865,0.476462,0.480343,8,false,true,neon,make_indirect_window_tile_4xK -> microkernel_4x8 -> scale_bias -> nchw_strided_writeback,0.476462,0.480343,false,0.877242,0.260892,false
+resnet_downsample,0.265602,0.372350,0.713313,8,false,true,neon,gather_stride1x1_activation_tile -> microkernel_4x8 -> scale_bias -> nchw_strided_writeback,0.372350,0.713313,false,0.553708,0.479679,false
+adaptive_avgpool2d_resnet_global,0.013332,0.002393,5.571249,4,true,true,amx,persistent_spin_workers -> shape_specialized_reduction_49 -> contiguous_writeback,0.002886,4.619543,true,0.002393,5.571249,true

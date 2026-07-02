@@ -1,0 +1,2 @@
+subkernel,shape,source,materialized_ms,dyop_native_ms,speedup_vs_materialized,passes_speed_gate,max_abs_error
+linear_gemm_qwen_seq,linear_gemm_qwen_seq,results/level2/arm64_amx_gate_results_gemm_repro2.csv,0.192396,0.305879,0.628993,False,

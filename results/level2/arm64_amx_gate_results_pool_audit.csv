@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,arm64_amx_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,op_tree
+adaptive_avgpool2d_resnet_global,0.013332,0.002708,4.922330,10,true,false,"persistent_spin_workers -> shape_specialized_reduction_49 -> contiguous_writeback"

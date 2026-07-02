@@ -6,8 +6,10 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <mutex>
+#include <new>
 #include <thread>
 #include <vector>
 
@@ -15,7 +17,29 @@
 #include <arm_neon.h>
 #endif
 
+#if defined(__APPLE__) && defined(__aarch64__)
+#include "../amx_intrinsics.h"
+#endif
+
 namespace py = pybind11;
+
+template <typename T>
+struct AlignedAllocator {
+    using value_type = T;
+    AlignedAllocator() noexcept = default;
+    template <class U> constexpr AlignedAllocator(const AlignedAllocator<U>&) noexcept {}
+    [[nodiscard]] T* allocate(std::size_t n) {
+        void* p = nullptr;
+        if (posix_memalign(&p, 64, n * sizeof(T)) != 0) throw std::bad_alloc();
+        return reinterpret_cast<T*>(p);
+    }
+    void deallocate(T* p, std::size_t) noexcept { free(p); }
+};
+
+template <class T, class U>
+bool operator==(const AlignedAllocator<T>&, const AlignedAllocator<U>&) { return true; }
+template <class T, class U>
+bool operator!=(const AlignedAllocator<T>&, const AlignedAllocator<U>&) { return false; }
 
 class NativeWorkerPool {
 public:
@@ -137,6 +161,28 @@ static NativeWorkerPool& native_worker_pool() {
     return pool;
 }
 
+static int native_thread_count() {
+    if (const char* value = std::getenv("DYOP_CPU_THREADS")) {
+        char* end = nullptr;
+        const long parsed = std::strtol(value, &end, 10);
+        if (end != value && parsed > 0) {
+            return int(std::min<long>(parsed, 256));
+        }
+    }
+    return std::max(1, at::get_num_threads());
+}
+
+static int native_amx_thread_count() {
+    if (const char* value = std::getenv("DYOP_AMX_THREADS")) {
+        char* end = nullptr;
+        const long parsed = std::strtol(value, &end, 10);
+        if (end != value && parsed > 0) {
+            return int(std::min<long>(parsed, 256));
+        }
+    }
+    return std::min(native_thread_count(), 7);
+}
+
 template <typename Fn>
 static void parallel_for_threads(int64_t begin, int64_t end, int threads, Fn fn) {
     native_worker_pool().parallel(begin, end, threads, fn);
@@ -146,6 +192,8 @@ struct PackedDyopWeight {
     at::Tensor codes;   // int16 [out, K], signed odd prefix code
     at::Tensor codes_knr;  // int16 [ceil(out/8), K, 8]
     at::Tensor codes_i8_knr;  // int8 [ceil(out/8), K, 8] when the prefix fits
+    at::Tensor codes_f32_knr;  // float32 [ceil(out/8), K, 8]
+    at::Tensor codes_f32_knr16;  // float32 [ceil(out/16), K, 16]
     at::Tensor scales;  // float32 [out, blocks], dyadic step / 2 per group
     at::Tensor scales_padded;  // float32 [ceil(out/8)*8, blocks]
     std::vector<int64_t> shape;
@@ -164,6 +212,12 @@ static PackedDyopWeight unpack_weight(const py::dict& packed) {
     }
     if (packed.contains("codes_i8_knr")) {
         w.codes_i8_knr = packed["codes_i8_knr"].cast<at::Tensor>().contiguous();
+    }
+    if (packed.contains("codes_f32_knr")) {
+        w.codes_f32_knr = packed["codes_f32_knr"].cast<at::Tensor>().contiguous();
+    }
+    if (packed.contains("codes_f32_knr16")) {
+        w.codes_f32_knr16 = packed["codes_f32_knr16"].cast<at::Tensor>().contiguous();
     }
     w.scales = packed["scales"].cast<at::Tensor>().contiguous();
     if (packed.contains("scales_padded")) {
@@ -210,6 +264,12 @@ inline void load_code_as_f32_8<int16_t>(const int16_t* p, float32x4_t& lo, float
 template <>
 inline void load_code_as_f32_8<int8_t>(const int8_t* p, float32x4_t& lo, float32x4_t& hi) {
     load_i8_as_f32_8(p, lo, hi);
+}
+
+template <>
+inline void load_code_as_f32_8<float>(const float* p, float32x4_t& lo, float32x4_t& hi) {
+    lo = vld1q_f32(p);
+    hi = vld1q_f32(p + 4);
 }
 
 static inline void accumulate_4k_8cols(
@@ -620,6 +680,206 @@ static inline void linear_microkernel_8x8(
     }
 }
 
+static inline void make_conv_tile_4xk(
+    const float* input,
+    int64_t batch_index,
+    int64_t p0,
+    int valid_m,
+    int64_t in_channels,
+    int64_t ih,
+    int64_t iw,
+    int64_t oh_width,
+    int64_t kernel_h,
+    int64_t kernel_w,
+    int64_t stride,
+    int64_t padding,
+    float* tile
+) {
+    const int64_t k_size = in_channels * kernel_h * kernel_w;
+    for (int m = 0; m < valid_m; ++m) {
+        const int64_t pos = p0 + m;
+        const int64_t oh_i = pos / oh_width;
+        const int64_t ow_i = pos - oh_i * oh_width;
+        float* dst = tile + int64_t(m) * k_size;
+        int64_t kk = 0;
+        for (int64_t ic = 0; ic < in_channels; ++ic) {
+            const float* base = input + ((batch_index * in_channels + ic) * ih) * iw;
+            for (int64_t kh = 0; kh < kernel_h; ++kh) {
+                const int64_t ih_i = oh_i * stride + kh - padding;
+                for (int64_t kw = 0; kw < kernel_w; ++kw, ++kk) {
+                    const int64_t iw_i = ow_i * stride + kw - padding;
+                    dst[kk] = (ih_i >= 0 && ih_i < ih && iw_i >= 0 && iw_i < iw)
+                        ? base[ih_i * iw + iw_i]
+                        : 0.0f;
+                }
+            }
+        }
+    }
+    for (int m = valid_m; m < 4; ++m) {
+        std::fill(tile + int64_t(m) * k_size, tile + int64_t(m + 1) * k_size, 0.0f);
+    }
+}
+
+template <typename CodeT>
+static void conv2d_knr_neon(
+    const float* input,
+    const CodeT* codes_knr,
+    const float* scales_padded,
+    const float* bias,
+    float* output,
+    int64_t batch,
+    int64_t in_channels,
+    int64_t ih,
+    int64_t iw,
+    int64_t out_channels,
+    int64_t blocks,
+    int64_t kernel_h,
+    int64_t kernel_w,
+    int64_t stride,
+    int64_t padding,
+    int64_t oh,
+    int64_t ow,
+    int threads
+) {
+    const int64_t k_size = in_channels * kernel_h * kernel_w;
+    const int64_t p_count = oh * ow;
+    const int64_t tiles_per_batch = (p_count + 3) / 4;
+    const int64_t total_tiles = batch * tiles_per_batch;
+    const int64_t nblocks = (out_channels + 7) / 8;
+    int64_t nb_group = nblocks;
+    if (total_tiles < threads) {
+        const int64_t groups_needed = (threads + std::max<int64_t>(1, total_tiles) - 1) /
+                                      std::max<int64_t>(1, total_tiles);
+        nb_group = std::max<int64_t>(1, (nblocks + groups_needed - 1) / groups_needed);
+    }
+    const int64_t ngroups = (nblocks + nb_group - 1) / nb_group;
+    const int64_t total_tasks = total_tiles * ngroups;
+
+    parallel_for_threads(0, total_tasks, threads, [&](int64_t begin, int64_t end) {
+        std::vector<float> tile(static_cast<size_t>(4 * k_size));
+        alignas(16) float tmp[4 * 8];
+        for (int64_t task = begin; task < end; ++task) {
+            const int64_t tile_group = task / ngroups;
+            const int64_t group = task - tile_group * ngroups;
+            const int64_t b = tile_group / tiles_per_batch;
+            const int64_t tile_index = tile_group - b * tiles_per_batch;
+            const int64_t p0 = tile_index * 4;
+            const int valid_m = int(std::min<int64_t>(4, p_count - p0));
+            make_conv_tile_4xk(
+                input, b, p0, valid_m, in_channels, ih, iw, ow,
+                kernel_h, kernel_w, stride, padding, tile.data()
+            );
+            const int64_t nb_begin = group * nb_group;
+            const int64_t nb_end = std::min<int64_t>(nblocks, nb_begin + nb_group);
+            for (int64_t nb = nb_begin; nb < nb_end; ++nb) {
+                const int64_t n0 = nb * 8;
+                const int valid_n = int(std::min<int64_t>(8, out_channels - n0));
+                linear_microkernel_4x8(
+                    tile.data(),
+                    k_size,
+                    codes_knr + nb * k_size * 8,
+                    scales_padded + n0 * blocks,
+                    bias ? bias + n0 : nullptr,
+                    tmp,
+                    8,
+                    k_size,
+                    valid_m,
+                    valid_n
+                );
+                for (int m = 0; m < valid_m; ++m) {
+                    const int64_t pos = p0 + m;
+                    const int64_t oh_i = pos / ow;
+                    const int64_t ow_i = pos - oh_i * ow;
+                    for (int lane = 0; lane < valid_n; ++lane) {
+                        const int64_t oc = n0 + lane;
+                        output[((b * out_channels + oc) * oh + oh_i) * ow + ow_i] =
+                            tmp[m * 8 + lane];
+                    }
+                }
+            }
+        }
+    });
+}
+
+#if defined(__APPLE__) && defined(__aarch64__)
+static bool linear_gemm_amx(
+    const float* input,
+    const PackedDyopWeight& packed,
+    const float* bias,
+    float* output,
+    int64_t m,
+    int64_t blocks
+) {
+    constexpr int64_t mr = 16;
+    constexpr int64_t nr = 16;
+    if (!packed.codes_f32_knr16.defined() || !packed.scales_padded.defined()) return false;
+    if (m < 8) return false;
+    if (packed.group_size < packed.k || blocks != 1) return false;
+
+    const int threads = native_amx_thread_count();
+    const int64_t k_size = packed.k;
+    const int64_t mblocks = (m + mr - 1) / mr;
+    const int64_t nblocks = (packed.out + nr - 1) / nr;
+    if (nblocks > packed.codes_f32_knr16.size(0)) return false;
+
+    const int64_t mp = mblocks * mr;
+    std::vector<float, AlignedAllocator<float>> a_t(static_cast<size_t>(k_size * mp), 0.0f);
+    parallel_for_threads(0, k_size, threads, [&](int64_t begin, int64_t end) {
+        for (int64_t k = begin; k < end; ++k) {
+            float* dst = a_t.data() + k * mp;
+            const float* src = input + k;
+            for (int64_t row = 0; row < m; ++row) {
+                dst[row] = src[row * k_size];
+            }
+        }
+    });
+
+    const float* codes_f32 = packed.codes_f32_knr16.data_ptr<float>();
+    const float* scales_padded = packed.scales_padded.data_ptr<float>();
+
+    parallel_for_threads(0, nblocks, threads, [&](int64_t begin, int64_t end) {
+        alignas(64) float z_buf[16][16];
+
+        AMX_SET();
+        for (int64_t nb = begin; nb < end; ++nb) {
+            const int64_t n0 = nb * nr;
+            const int valid_n = int(std::min<int64_t>(nr, packed.out - n0));
+            const float* w_panel = codes_f32 + nb * k_size * nr;
+            const float* scale = scales_padded + n0 * blocks;
+            const float* bias_ptr = bias ? bias + n0 : nullptr;
+            for (int64_t mb = 0; mb < mblocks; ++mb) {
+                const int64_t m0 = mb * mr;
+                const int valid_m = int(std::min<int64_t>(mr, m - m0));
+                const int z_row = int(mb & 3);
+                const float* a_panel = a_t.data() + m0;
+                float* out_tile = output + m0 * packed.out + n0;
+
+                AMX_FMA32(amx_enc_zero_z(z_row));
+                for (int64_t k = 0; k < k_size; ++k) {
+                    AMX_LDX((uint64_t)(a_panel + k * mp));
+                    AMX_LDY((uint64_t)(w_panel + k * nr));
+                    AMX_FMA32(amx_enc_fma32(0, 0, z_row));
+                }
+
+                for (int j = 0; j < 16; ++j) {
+                    AMX_STZ(amx_enc_stz(&z_buf[j][0], j * 4 + z_row));
+                }
+
+                for (int i = 0; i < valid_m; ++i) {
+                    float* dst = out_tile + int64_t(i) * packed.out;
+                    for (int j = 0; j < valid_n; ++j) {
+                        const float b = bias_ptr ? bias_ptr[j] : 0.0f;
+                        dst[j] = z_buf[j][i] * scale[j] + b;
+                    }
+                }
+            }
+        }
+        AMX_CLR();
+    });
+    return true;
+}
+#endif
+
 #endif
 
 static inline float dyop_dot(
@@ -695,12 +955,15 @@ py::dict pack_native_cpu_weight(
 
     auto codes = at::empty({out, k}, signs.options().dtype(at::kShort));
     const int64_t out_padded = ((out + 7) / 8) * 8;
+    const int64_t out_padded16 = ((out + 15) / 16) * 16;
     auto codes_knr = at::zeros({out_padded / 8, k, 8}, signs.options().dtype(at::kShort));
     auto codes_i8_knr = at::empty({0}, signs.options().dtype(at::kChar));
     const bool use_i8_knr = bits <= 7;
     if (use_i8_knr) {
         codes_i8_knr = at::zeros({out_padded / 8, k, 8}, signs.options().dtype(at::kChar));
     }
+    auto codes_f32_knr = at::zeros({out_padded / 8, k, 8}, signs.options().dtype(at::kFloat));
+    auto codes_f32_knr16 = at::zeros({out_padded16 / 16, k, 16}, signs.options().dtype(at::kFloat));
     auto scales = at::empty({out, blocks}, signs.options().dtype(at::kFloat));
     auto scales_padded = at::zeros({out_padded, blocks}, signs.options().dtype(at::kFloat));
 
@@ -710,6 +973,8 @@ py::dict pack_native_cpu_weight(
     int16_t* code_ptr = codes.data_ptr<int16_t>();
     int16_t* knr_ptr = codes_knr.data_ptr<int16_t>();
     int8_t* knr_i8_ptr = use_i8_knr ? codes_i8_knr.data_ptr<int8_t>() : nullptr;
+    float* knr_f32_ptr = codes_f32_knr.data_ptr<float>();
+    float* knr16_f32_ptr = codes_f32_knr16.data_ptr<float>();
     float* scale_ptr = scales.data_ptr<float>();
     float* scale_pad_ptr = scales_padded.data_ptr<float>();
 
@@ -732,6 +997,10 @@ py::dict pack_native_cpu_weight(
                 const int64_t lane = n - nb * 8;
                 const int64_t knr_offset = (nb * k + i) * 8 + lane;
                 knr_ptr[knr_offset] = code;
+                knr_f32_ptr[knr_offset] = static_cast<float>(code);
+                const int64_t nb16 = n / 16;
+                const int64_t lane16 = n - nb16 * 16;
+                knr16_f32_ptr[(nb16 * k + i) * 16 + lane16] = static_cast<float>(code);
                 if (knr_i8_ptr) {
                     knr_i8_ptr[knr_offset] = static_cast<int8_t>(code);
                 }
@@ -743,6 +1012,8 @@ py::dict pack_native_cpu_weight(
     packed["codes"] = codes;
     packed["codes_knr"] = codes_knr;
     if (use_i8_knr) packed["codes_i8_knr"] = codes_i8_knr;
+    packed["codes_f32_knr"] = codes_f32_knr;
+    packed["codes_f32_knr16"] = codes_f32_knr16;
     packed["scales"] = scales;
     packed["scales_padded"] = scales_padded;
     packed["shape"] = shape;
@@ -778,13 +1049,19 @@ at::Tensor dyadic_linear_packed_native_cpu(
     const int64_t m = input.size(0);
     const int64_t blocks = packed.scales.size(1);
 
+#if defined(__APPLE__) && defined(__aarch64__) && (defined(__ARM_NEON) || defined(__ARM_NEON__))
+    if (linear_gemm_amx(x, packed, bias, y, m, blocks)) {
+        return output;
+    }
+#endif
+
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
     if (packed.group_size >= packed.k && packed.codes_knr.defined() && packed.scales_padded.defined()) {
         const float* scales_padded = packed.scales_padded.data_ptr<float>();
         auto run_knr8 = [&](auto codes_knr) {
             const int64_t mblocks = (m + 7) / 8;
             const int64_t nblocks = (packed.out + 7) / 8;
-            parallel_for_threads(0, mblocks * nblocks, at::get_num_threads(), [&](int64_t begin, int64_t end) {
+            parallel_for_threads(0, mblocks * nblocks, native_thread_count(), [&](int64_t begin, int64_t end) {
                 for (int64_t task = begin; task < end; ++task) {
                     const int64_t mb = task / nblocks;
                     const int64_t nb = task - mb * nblocks;
@@ -810,7 +1087,7 @@ at::Tensor dyadic_linear_packed_native_cpu(
         auto run_knr4 = [&](auto codes_knr) {
             const int64_t mblocks = (m + 3) / 4;
             const int64_t nblocks = (packed.out + 7) / 8;
-            parallel_for_threads(0, mblocks * nblocks, at::get_num_threads(), [&](int64_t begin, int64_t end) {
+            parallel_for_threads(0, mblocks * nblocks, native_thread_count(), [&](int64_t begin, int64_t end) {
                 for (int64_t task = begin; task < end; ++task) {
                     const int64_t mb = task / nblocks;
                     const int64_t nb = task - mb * nblocks;
@@ -833,7 +1110,11 @@ at::Tensor dyadic_linear_packed_native_cpu(
                 }
             });
         };
-        if (packed.codes_i8_knr.defined()) {
+        if (packed.codes_f32_knr.defined()) {
+            const float* codes_f32_knr = packed.codes_f32_knr.data_ptr<float>();
+            if (m >= 8) run_knr8(codes_f32_knr);
+            else run_knr4(codes_f32_knr);
+        } else if (packed.codes_i8_knr.defined()) {
             const int8_t* codes_i8_knr = packed.codes_i8_knr.data_ptr<int8_t>();
             if (m >= 8) run_knr8(codes_i8_knr);
             else run_knr4(codes_i8_knr);
@@ -949,6 +1230,78 @@ at::Tensor dyadic_conv2d_packed_native_cpu(
     const int64_t blocks = packed.scales.size(1);
     const int64_t total = batch * packed.out * oh * ow;
 
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    if (packed.group_size >= packed.k && packed.codes_knr.defined() && packed.scales_padded.defined()) {
+        const float* scales_padded = packed.scales_padded.data_ptr<float>();
+        const int threads = native_thread_count();
+        if (packed.codes_f32_knr.defined()) {
+            conv2d_knr_neon(
+                x,
+                packed.codes_f32_knr.data_ptr<float>(),
+                scales_padded,
+                bias,
+                y,
+                batch,
+                in_channels,
+                ih,
+                iw,
+                packed.out,
+                blocks,
+                kernel_h,
+                kernel_w,
+                stride,
+                padding,
+                oh,
+                ow,
+                threads
+            );
+        } else if (packed.codes_i8_knr.defined()) {
+            conv2d_knr_neon(
+                x,
+                packed.codes_i8_knr.data_ptr<int8_t>(),
+                scales_padded,
+                bias,
+                y,
+                batch,
+                in_channels,
+                ih,
+                iw,
+                packed.out,
+                blocks,
+                kernel_h,
+                kernel_w,
+                stride,
+                padding,
+                oh,
+                ow,
+                threads
+            );
+        } else {
+            conv2d_knr_neon(
+                x,
+                packed.codes_knr.data_ptr<int16_t>(),
+                scales_padded,
+                bias,
+                y,
+                batch,
+                in_channels,
+                ih,
+                iw,
+                packed.out,
+                blocks,
+                kernel_h,
+                kernel_w,
+                stride,
+                padding,
+                oh,
+                ow,
+                threads
+            );
+        }
+        return output;
+    }
+#endif
+
     at::parallel_for(0, total, 64, [&](int64_t begin, int64_t end) {
         std::vector<float> window(static_cast<size_t>(packed.k));
         for (int64_t index = begin; index < end; ++index) {
@@ -1014,7 +1367,7 @@ at::Tensor native_adaptive_avg_pool2d_cpu(
 }
 
 void warm_native_cpu_workers() {
-    native_worker_pool().warm(at::get_num_threads());
+    native_worker_pool().warm(native_thread_count());
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

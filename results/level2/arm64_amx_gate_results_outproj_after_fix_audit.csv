@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,arm64_amx_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,op_tree
+linear_output_projection,10.843443,39.719250,0.273002,10,false,true,"pack_weight_k_nr -> microkernel_16x16_amx -> apply_scale_bias -> contiguous_writeback"

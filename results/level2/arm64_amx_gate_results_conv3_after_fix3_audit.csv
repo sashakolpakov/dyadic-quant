@@ -1,0 +1,2 @@
+subkernel,materialized_gate_ms,arm64_amx_ms,speedup_vs_arm64_gate,best_threads,passes_fixed_gate,correct,op_tree
+resnet_layer4_stride2_3x3,0.228865,0.877242,0.260892,4,false,true,"make_indirect_window_tile_16xK -> microkernel_16x16_amx -> scale_bias -> nchw_strided_writeback"
