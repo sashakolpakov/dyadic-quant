@@ -1605,11 +1605,26 @@ static at::Tensor dyadic_qwen_mlp_packed_weight_native_cpu(
     const PackedDyopWeight& down_packed,
     const at::Tensor& gate_bias,
     const at::Tensor& up_bias,
-    const at::Tensor& down_bias
+    const at::Tensor& down_bias,
+    at::Tensor* hidden_workspace = nullptr
 ) {
     auto gate = dyadic_linear_packed_weight_native_cpu(input, gate_packed, gate_bias);
     auto up = dyadic_linear_packed_weight_native_cpu(input, up_packed, up_bias);
-    auto hidden = at::silu(gate).mul_(up);
+    at::Tensor hidden;
+    if (hidden_workspace != nullptr) {
+        if (
+            !hidden_workspace->defined() ||
+            hidden_workspace->sizes() != gate.sizes() ||
+            hidden_workspace->scalar_type() != gate.scalar_type()
+        ) {
+            *hidden_workspace = at::empty_like(gate);
+        }
+        at::silu_out(*hidden_workspace, gate);
+        hidden_workspace->mul_(up);
+        hidden = *hidden_workspace;
+    } else {
+        hidden = at::silu(gate).mul_(up);
+    }
     return dyadic_linear_packed_weight_native_cpu(hidden, down_packed, down_bias);
 }
 
@@ -1641,6 +1656,7 @@ struct PlannedMlpBlock {
     at::Tensor gate_bias;
     at::Tensor up_bias;
     at::Tensor down_bias;
+    at::Tensor hidden_workspace;
 };
 
 struct PlannedMlpStack {
@@ -1684,7 +1700,7 @@ at::Tensor dyadic_qwen_mlp_stack_plan_native_cpu(
     );
     TORCH_CHECK(plan != nullptr, "invalid Qwen MLP stack plan");
     at::Tensor current = input;
-    for (const PlannedMlpBlock& block : plan->blocks) {
+    for (PlannedMlpBlock& block : plan->blocks) {
         current = dyadic_qwen_mlp_packed_weight_native_cpu(
             current,
             block.gate_packed,
@@ -1692,7 +1708,8 @@ at::Tensor dyadic_qwen_mlp_stack_plan_native_cpu(
             block.down_packed,
             block.gate_bias,
             block.up_bias,
-            block.down_bias
+            block.down_bias,
+            &block.hidden_workspace
         );
     }
     return current;

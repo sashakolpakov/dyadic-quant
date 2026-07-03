@@ -63,6 +63,23 @@ Qwen block runner that keeps hidden states and layer intermediates in C++ across
 RMSNorm, attention projections, attention reductions, MLP projections, and
 residual adds.
 
+Axiom design points to reuse:
+
+- Lazy DAG execution separates shape/dtype metadata from materialization.
+- Structural graph signatures allow compile/plan caches independent of data
+  values.
+- Native plans own reusable intermediate buffers instead of allocating a new
+  tensor for every operation edge.
+- On Apple Silicon, MPSGraph can execute a whole fused graph over shared Metal
+  buffers, so CPU/GPU handoff should be a device-tag or command-boundary
+  decision, not a per-op tensor transfer.
+
+The current packed Qwen MLP stack plan applies the third point: the native plan
+stores packed dyadic weights and now reuses a per-block activation workspace.
+The next step is to lift this from an MLP-only plan into a Qwen block plan with
+RMSNorm, residual adds, QKV/O projection flow, attention, and MLP in one cached
+execution boundary.
+
 Current LLM artifacts:
 
 - `results/level2/<run-id>/kernels/qwen_native_kernels.csv`: isolated AVX
