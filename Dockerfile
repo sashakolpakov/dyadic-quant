@@ -28,7 +28,7 @@ RUN curl -fsSL "https://ollama.com/download/ollama-linux-${OLLAMA_ARCH}.tar.zst"
 
 COPY requirements.txt /workspace/requirements.txt
 RUN python3 -m pip install --upgrade pip \
-    && python3 -m pip install --index-url https://download.pytorch.org/whl/cu124 torch torchvision \
+    && python3 -m pip install --index-url https://download.pytorch.org/whl/cu124 torch \
     && python3 -m pip install -r /workspace/requirements.txt
 
 COPY . /workspace

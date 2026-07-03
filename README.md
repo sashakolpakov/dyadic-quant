@@ -28,7 +28,6 @@ limitations.
 Level 1 repros:
 
 ```bash
-python3 experiments/level1/run_resnet18_dyadic.py --help
 python3 experiments/level1/run_qwen_dyadic.py --help
 python3 experiments/level1/run_dyadic_group_sweep.py --help
 python3 experiments/level1/run_textual_comparison.py --help
@@ -53,9 +52,6 @@ python3 experiments/run_qwen_textual_global_rerun.py --help
 
 Measured Apple M5 results are recorded in [`EXP_LOG.md`](EXP_LOG.md):
 
-- ResNet-18: 6-bit dyadic weights reached 65.86% Imagenette top-1 versus
-  66.85% FP16, using 9.43 MB versus 23.37 MB estimated stored size; the
-  8-bit prefix reached 66.78%.
 - Qwen2.5 0.5B: group-32 block-wise dyadic at 6.25 effective bits/weight
   reached WikiText-2 perplexity 28.88, 87.0% next-token agreement, and 47%
   ARC-Easy conditional-likelihood accuracy. This is comparable to Q4_K_M at
