@@ -44,6 +44,13 @@ def shape_of(value: object) -> str:
     return ""
 
 
+def synchronize_device(device: torch.device) -> None:
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    elif device.type == "mps":
+        torch.mps.synchronize()
+
+
 def register_timers(model: nn.Module) -> tuple[list[torch.utils.hooks.RemovableHandle], dict[tuple[str, str, str], Timing]]:
     timings: dict[tuple[str, str, str], Timing] = defaultdict(Timing)
     starts: dict[int, list[tuple[float, str]]] = defaultdict(list)
@@ -81,10 +88,12 @@ def register_timers(model: nn.Module) -> tuple[list[torch.utils.hooks.RemovableH
     return handles, timings
 
 
-def forward_once(model: nn.Module, input_ids: torch.Tensor) -> float:
+def forward_once(model: nn.Module, input_ids: torch.Tensor, device: torch.device) -> float:
+    synchronize_device(device)
     start = perf_counter()
     with torch.inference_mode():
         model(input_ids=input_ids, use_cache=False)
+    synchronize_device(device)
     return (perf_counter() - start) * 1000.0
 
 
@@ -92,6 +101,7 @@ def write_rows(
     output: Path,
     *,
     backend: str,
+    batch_size: int,
     sequence_length: int,
     repeats: int,
     forward_ms: list[float],
@@ -100,6 +110,7 @@ def write_rows(
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "backend",
+        "batch_size",
         "sequence_length",
         "repeats",
         "scope",
@@ -120,12 +131,13 @@ def write_rows(
         writer.writerow(
             {
                 "backend": backend,
+                "batch_size": batch_size,
                 "sequence_length": sequence_length,
                 "repeats": repeats,
                 "scope": "full_forward",
                 "module_name": "",
                 "module_type": "",
-                "input_shape": f"1x{sequence_length}",
+                "input_shape": f"{batch_size}x{sequence_length}",
                 "calls": len(forward_ms),
                 "total_ms": sum(forward_ms),
                 "avg_us": 1000.0 * sum(forward_ms) / max(1, len(forward_ms)),
@@ -141,6 +153,7 @@ def write_rows(
             writer.writerow(
                 {
                     "backend": backend,
+                    "batch_size": batch_size,
                     "sequence_length": sequence_length,
                     "repeats": repeats,
                     "scope": "module",
@@ -160,7 +173,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--bits", type=int, default=6)
-    parser.add_argument("--sequence-lengths", nargs="+", type=int, default=[1, 8, 64, 256])
+    parser.add_argument("--sequence-lengths", nargs="+", type=int, default=[8, 64, 256])
+    parser.add_argument("--batch-sizes", nargs="+", type=int, default=[1])
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--threads", type=int, default=None)
     parser.add_argument("--load-dyadic", type=Path)
@@ -169,8 +183,33 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also time the original CPU Transformers model before Level 2 native.",
     )
+    parser.add_argument(
+        "--source-device",
+        choices=["auto", "cpu", "mps", "cuda"],
+        default="cpu",
+        help="Device for the original Transformers source timing.",
+    )
+    parser.add_argument(
+        "--skip-module-timing",
+        action="store_true",
+        help="Only write full-forward rows for Level 2 native timing.",
+    )
     parser.add_argument("--output", type=Path, default=Path("results/level2/qwen_depth_profile.csv"))
     return parser.parse_args()
+
+
+def resolve_source_device(requested: str) -> torch.device:
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if requested == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("requested --source-device cuda but CUDA is unavailable")
+    if requested == "mps" and not torch.backends.mps.is_available():
+        raise RuntimeError("requested --source-device mps but MPS is unavailable")
+    return torch.device(requested)
 
 
 def main() -> None:
@@ -190,28 +229,36 @@ def main() -> None:
     ).eval()
 
     if args.include_source:
-        for sequence_length in args.sequence_lengths:
-            input_ids = torch.full(
-                (1, sequence_length),
-                fill_value=tokenizer.eos_token_id,
-                dtype=torch.long,
-            )
-            forward_once(model, input_ids)
-            forward_ms = [
-                forward_once(model, input_ids) for _ in range(args.repeats)
-            ]
-            write_rows(
-                args.output,
-                backend="transformers-source-cpu",
-                sequence_length=sequence_length,
-                repeats=args.repeats,
-                forward_ms=forward_ms,
-                timings={},
-            )
-            print(
-                f"source seq={sequence_length}: avg_forward_ms="
-                f"{sum(forward_ms) / max(1, len(forward_ms)):.3f}"
-            )
+        source_device = resolve_source_device(args.source_device)
+        model.to(source_device)
+        for batch_size in args.batch_sizes:
+            for sequence_length in args.sequence_lengths:
+                input_ids = torch.full(
+                    (batch_size, sequence_length),
+                    fill_value=tokenizer.eos_token_id,
+                    dtype=torch.long,
+                    device=source_device,
+                )
+                forward_once(model, input_ids, source_device)
+                forward_ms = [
+                    forward_once(model, input_ids, source_device)
+                    for _ in range(args.repeats)
+                ]
+                write_rows(
+                    args.output,
+                    backend=f"transformers-source-{source_device.type}",
+                    batch_size=batch_size,
+                    sequence_length=sequence_length,
+                    repeats=args.repeats,
+                    forward_ms=forward_ms,
+                    timings={},
+                )
+                print(
+                    f"source device={source_device.type} batch={batch_size} "
+                    f"seq={sequence_length}: avg_forward_ms="
+                    f"{sum(forward_ms) / max(1, len(forward_ms)):.3f}"
+                )
+        model.to("cpu")
 
     encoded = (
         load_encoded_model(args.load_dyadic)
@@ -234,32 +281,38 @@ def main() -> None:
     print(f"Profiling {len(replacement.replaced_modules)} Level 2 native modules")
 
     for sequence_length in args.sequence_lengths:
-        input_ids = torch.full(
-            (1, sequence_length),
-            fill_value=tokenizer.eos_token_id,
-            dtype=torch.long,
-        )
-        forward_once(native_model, input_ids)
-        handles, timings = register_timers(native_model)
-        forward_ms: list[float] = []
-        try:
-            for _ in range(args.repeats):
-                forward_ms.append(forward_once(native_model, input_ids))
-        finally:
-            for handle in handles:
-                handle.remove()
-        write_rows(
-            args.output,
-            backend="level2-native",
-            sequence_length=sequence_length,
-            repeats=args.repeats,
-            forward_ms=forward_ms,
-            timings=timings,
-        )
-        print(
-            f"seq={sequence_length}: avg_forward_ms="
-            f"{sum(forward_ms) / max(1, len(forward_ms)):.3f}"
-        )
+        for batch_size in args.batch_sizes:
+            input_ids = torch.full(
+                (batch_size, sequence_length),
+                fill_value=tokenizer.eos_token_id,
+                dtype=torch.long,
+            )
+            forward_once(native_model, input_ids, torch.device("cpu"))
+            handles, timings = (
+                ([], {}) if args.skip_module_timing else register_timers(native_model)
+            )
+            forward_ms: list[float] = []
+            try:
+                for _ in range(args.repeats):
+                    forward_ms.append(
+                        forward_once(native_model, input_ids, torch.device("cpu"))
+                    )
+            finally:
+                for handle in handles:
+                    handle.remove()
+            write_rows(
+                args.output,
+                backend="level2-native",
+                batch_size=batch_size,
+                sequence_length=sequence_length,
+                repeats=args.repeats,
+                forward_ms=forward_ms,
+                timings=timings,
+            )
+            print(
+                f"native batch={batch_size} seq={sequence_length}: "
+                f"avg_forward_ms={sum(forward_ms) / max(1, len(forward_ms)):.3f}"
+            )
 
     print(f"Wrote {args.output}")
 
