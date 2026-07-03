@@ -351,6 +351,12 @@ def parse_args() -> argparse.Namespace:
         help="Fuse Qwen MLP projections into a reusable native packed plan.",
     )
     parser.add_argument(
+        "--qwen-norm-backend",
+        choices=["torch", "native-cpu"],
+        default="torch",
+        help="Replace Qwen RMSNorm modules with native CPU execution.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         help=(
@@ -517,6 +523,7 @@ def main() -> None:
                 linear_backend=args.level2_linear_backend,
                 embedding_backend=args.level2_embedding_backend,
                 qwen_mlp_backend=args.qwen_mlp_backend,
+                qwen_norm_backend=args.qwen_norm_backend,
             )
             level2_build_ms = (perf_counter() - start) * 1000
             materialization_ms = 0.0
@@ -566,6 +573,16 @@ def main() -> None:
                 ),
                 "level2_embedding_backend": (
                     args.level2_embedding_backend
+                    if args.execution_backend == "level2-native"
+                    else ""
+                ),
+                "qwen_mlp_backend": (
+                    args.qwen_mlp_backend
+                    if args.execution_backend == "level2-native"
+                    else ""
+                ),
+                "qwen_norm_backend": (
+                    args.qwen_norm_backend
                     if args.execution_backend == "level2-native"
                     else ""
                 ),

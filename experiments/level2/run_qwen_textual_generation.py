@@ -78,6 +78,12 @@ def parse_args() -> argparse.Namespace:
         help="Fuse Qwen MLP projections into a reusable native packed plan.",
     )
     parser.add_argument(
+        "--qwen-norm-backend",
+        choices=["torch", "native-cpu"],
+        default="torch",
+        help="Replace Qwen RMSNorm modules with native CPU execution.",
+    )
+    parser.add_argument(
         "--generations-file",
         type=Path,
         default=Path("results/level2/qwen25_dyop_generations.json"),
@@ -200,6 +206,7 @@ def main() -> None:
             linear_backend=args.linear_backend,
             embedding_backend=args.embedding_backend,
             qwen_mlp_backend=args.qwen_mlp_backend,
+            qwen_norm_backend=args.qwen_norm_backend,
         )
         candidate.eval().to(device)
         variant = f"{args.dyop_prefix}_{bits}"

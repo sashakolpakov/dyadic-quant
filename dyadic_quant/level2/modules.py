@@ -17,6 +17,7 @@ from dyadic_quant.level2.dyops import (
     native_adaptive_avg_pool2d_cpu,
     native_max_pool2d_cpu,
     native_relu_cpu,
+    native_rms_norm_cpu,
     pack_native_weight,
 )
 from dyadic_quant.level2.native import (
@@ -256,6 +257,19 @@ class NativeAdaptiveAvgPool2d(nn.Module):
         return native_adaptive_avg_pool2d_cpu(inputs, self.output_size)
 
 
+class NativeRMSNorm(nn.Module):
+    def __init__(self, source: nn.Module) -> None:
+        super().__init__()
+        weight = getattr(source, "weight")
+        self.register_buffer("weight", weight.detach().clone().float())
+        self.variance_epsilon = float(
+            getattr(source, "variance_epsilon", getattr(source, "eps", 1e-6))
+        )
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return native_rms_norm_cpu(inputs, self.weight, self.variance_epsilon)
+
+
 _MODULE_TYPE_MAP: dict[type, type] = {
     nn.Linear: DyadicLinear,
     nn.Embedding: DyadicEmbedding,
@@ -280,6 +294,7 @@ def build_level2_model(
     embedding_backend: str = "scalar",
     spatial_backend: str = "torch",
     qwen_mlp_backend: str = "torch",
+    qwen_norm_backend: str = "torch",
     overrides: dict[str, int] | None = None,
 ) -> tuple[nn.Module, NativeCPUReplacement]:
     overrides = overrides or {}
@@ -292,6 +307,8 @@ def build_level2_model(
         raise ValueError("qwen_mlp_backend must be 'torch' or 'native-cpu-plan'")
     if qwen_mlp_backend == "native-cpu-plan" and linear_backend != "native-cpu":
         raise ValueError("qwen_mlp_backend='native-cpu-plan' requires native-cpu Linear")
+    if qwen_norm_backend not in ("torch", "native-cpu"):
+        raise ValueError("qwen_norm_backend must be 'torch' or 'native-cpu'")
     encoded_map: dict[str, DyadicTensor] = {
         item.name: item.tensor for item in encoded.modules
     }
@@ -312,6 +329,13 @@ def build_level2_model(
                 weight_id_to_tensor[tid] = (encoded_map[name], overrides.get(name, bits))
 
     for name, module in all_modules.items():
+        if qwen_norm_backend == "native-cpu" and _is_rms_norm_module(module):
+            if name:
+                _replace_module(candidate, name, NativeRMSNorm(module))
+            else:
+                candidate = NativeRMSNorm(module)
+            replaced_modules.append(name)
+            continue
         if (
             spatial_backend == "native-cpu"
             and type(module) in _SPATIAL_TYPE_MAP
@@ -413,6 +437,13 @@ def _is_silu_activation(act_fn: object) -> bool:
     name = getattr(act_fn, "__name__", "")
     class_name = act_fn.__class__.__name__.lower()
     return name in {"silu", "silu_activation"} or "silu" in class_name
+
+
+def _is_rms_norm_module(module: nn.Module) -> bool:
+    if not module.__class__.__name__.lower().endswith("rmsnorm"):
+        return False
+    weight = getattr(module, "weight", None)
+    return isinstance(weight, torch.Tensor) and weight.ndim == 1
 
 
 def _validate_backend(backend: str, label: str) -> str:

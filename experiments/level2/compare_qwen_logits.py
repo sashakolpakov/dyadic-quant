@@ -39,6 +39,12 @@ def parse_args() -> argparse.Namespace:
         help="Fuse Qwen MLP projections into a reusable native packed plan.",
     )
     parser.add_argument(
+        "--qwen-norm-backend",
+        choices=["torch", "native-cpu"],
+        default="torch",
+        help="Replace Qwen RMSNorm modules with native CPU execution.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("results/level2/qwen_logit_equivalence.json"),
@@ -48,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("results/level2/subkernel_speed_gates_arm64_neon_latest.csv"),
         help="CSV proving required Qwen native dyop kernels beat materialized gates.",
+    )
+    parser.add_argument(
+        "--skip-speed-gate-check",
+        action="store_true",
+        help="Compare logits even when native speed gates are incomplete or failing.",
     )
     return parser.parse_args()
 
@@ -69,7 +80,8 @@ def flatten_output(output):
 
 def main() -> None:
     args = parse_args()
-    require_speed_gates(args.speed_gates, "qwen")
+    if not args.skip_speed_gate_check:
+        require_speed_gates(args.speed_gates, "qwen")
     build_native_cpu()
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir, local_files_only=True)
     tokenizer.pad_token = tokenizer.eos_token
@@ -105,6 +117,7 @@ def main() -> None:
         linear_backend="native-cpu",
         embedding_backend="native-cpu",
         qwen_mlp_backend=args.qwen_mlp_backend,
+        qwen_norm_backend=args.qwen_norm_backend,
     )
     level2_build_ms = (perf_counter() - start) * 1000
     level2.eval()

@@ -200,6 +200,12 @@ def parse_args() -> argparse.Namespace:
         default="torch",
         help="Fuse Qwen MLP projections into a reusable native packed plan.",
     )
+    parser.add_argument(
+        "--qwen-norm-backend",
+        choices=["torch", "native-cpu"],
+        default="torch",
+        help="Replace Qwen RMSNorm modules with native CPU execution.",
+    )
     parser.add_argument("--output", type=Path, default=Path("results/level2/qwen_depth_profile.csv"))
     return parser.parse_args()
 
@@ -283,6 +289,7 @@ def main() -> None:
         linear_backend="native-cpu",
         embedding_backend="native-cpu",
         qwen_mlp_backend=args.qwen_mlp_backend,
+        qwen_norm_backend=args.qwen_norm_backend,
     )
     native_model.eval()
     print(

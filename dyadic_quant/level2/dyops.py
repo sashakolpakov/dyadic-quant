@@ -114,6 +114,16 @@ def native_relu_cpu(a: torch.Tensor) -> torch.Tensor:
     return native_fn(a)
 
 
+def native_rms_norm_cpu(
+    inputs: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    from dyadic_quant.level2.native import native_rms_norm_cpu as native_fn
+
+    return native_fn(inputs, weight, eps)
+
+
 def native_max_pool2d_cpu(
     inputs: torch.Tensor,
     *,

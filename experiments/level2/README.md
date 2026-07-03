@@ -78,9 +78,11 @@ The current packed Qwen MLP stack plan applies the third point: the native plan
 stores packed dyadic weights and now reuses a per-block activation workspace.
 `build_level2_model(..., qwen_mlp_backend="native-cpu-plan")` wires this into
 Qwen-style MLP modules by replacing `gate_proj/up_proj/down_proj + SiLU` with a
-single packed native plan. The next step is to lift this from an MLP-only plan
-into a Qwen block plan with RMSNorm, residual adds, QKV/O projection flow,
-attention, and MLP in one cached execution boundary.
+single packed native plan. `qwen_norm_backend="native-cpu"` also replaces
+Qwen-style RMSNorm modules with native CPU execution over the hidden-state
+flow. The next step is to lift this from separate MLP/norm native islands into
+a Qwen block plan with RMSNorm, residual adds, QKV/O projection flow, attention,
+and MLP in one cached execution boundary.
 
 Current LLM artifacts:
 

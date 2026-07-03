@@ -1907,6 +1907,45 @@ at::Tensor native_relu_cpu(const at::Tensor& a) {
     return at::relu(a);
 }
 
+at::Tensor native_rms_norm_cpu(
+    const at::Tensor& input,
+    const at::Tensor& weight,
+    double eps
+) {
+    TORCH_CHECK(input.device().is_cpu(), "native RMSNorm input must be CPU");
+    TORCH_CHECK(weight.device().is_cpu(), "native RMSNorm weight must be CPU");
+    TORCH_CHECK(input.scalar_type() == at::kFloat, "native RMSNorm input must be float32");
+    TORCH_CHECK(weight.scalar_type() == at::kFloat, "native RMSNorm weight must be float32");
+    TORCH_CHECK(input.dim() >= 1, "native RMSNorm input must have at least one dimension");
+    const int64_t width = input.size(input.dim() - 1);
+    TORCH_CHECK(weight.numel() == width, "native RMSNorm weight width mismatch");
+
+    at::Tensor input_c = input.contiguous();
+    at::Tensor weight_c = weight.contiguous();
+    at::Tensor output = at::empty_like(input_c);
+    const int64_t rows = input_c.numel() / width;
+    const float* x = input_c.data_ptr<float>();
+    const float* w = weight_c.data_ptr<float>();
+    float* y = output.data_ptr<float>();
+
+    parallel_for_threads(0, rows, native_thread_count(), [&](int64_t begin, int64_t end) {
+        for (int64_t row = begin; row < end; ++row) {
+            const float* row_x = x + row * width;
+            float* row_y = y + row * width;
+            double sumsq = 0.0;
+            for (int64_t col = 0; col < width; ++col) {
+                const double v = static_cast<double>(row_x[col]);
+                sumsq += v * v;
+            }
+            const float inv_rms = static_cast<float>(1.0 / std::sqrt(sumsq / width + eps));
+            for (int64_t col = 0; col < width; ++col) {
+                row_y[col] = row_x[col] * inv_rms * w[col];
+            }
+        }
+    });
+    return output.reshape(input.sizes());
+}
+
 at::Tensor native_max_pool2d_cpu(
     const at::Tensor& input,
     int64_t kernel_size,
@@ -1950,6 +1989,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           "Elementwise add (CPU)");
     m.def("native_relu_cpu", &native_relu_cpu,
           "Elementwise ReLU (CPU)");
+    m.def("native_rms_norm_cpu", &native_rms_norm_cpu,
+          "RMSNorm over the last dimension (CPU)");
     m.def("native_max_pool2d_cpu", &native_max_pool2d_cpu,
           "MaxPool2d (CPU)");
     m.def("native_adaptive_avg_pool2d_cpu", &native_adaptive_avg_pool2d_cpu,

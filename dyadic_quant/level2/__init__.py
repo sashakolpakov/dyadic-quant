@@ -14,6 +14,7 @@ from dyadic_quant.level2.dyops import (
     native_adaptive_avg_pool2d_cpu,
     native_max_pool2d_cpu,
     native_relu_cpu,
+    native_rms_norm_cpu,
 )
 
 from dyadic_quant.level2.modules import (
@@ -25,6 +26,7 @@ from dyadic_quant.level2.modules import (
     NativeMaxPool2d,
     NativeCPUReplacement,
     NativeReLU,
+    NativeRMSNorm,
     build_level2_model,
 )
 

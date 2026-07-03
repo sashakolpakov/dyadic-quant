@@ -14,6 +14,7 @@ from dyadic_quant.level2 import (
     DyadicEmbedding,
     DyadicLinear,
     DyadicQwenMLPNative,
+    NativeRMSNorm,
     build_level2_model,
 )
 
@@ -166,4 +167,45 @@ def test_level2_qwen_mlp_native_plan_matches_materialized_forward():
     assert report.replaced_modules == ("gate_proj", "up_proj", "down_proj")
     assert report.fused_modules == ("",)
     assert isinstance(level2, DyadicQwenMLPNative)
+    torch.testing.assert_close(level2(inputs), level1(inputs), rtol=1e-5, atol=1e-5)
+
+
+def test_level2_qwen_rms_norm_native_matches_source_forward():
+    class TinyRMSNorm(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.weight = nn.Parameter(torch.randn(5))
+            self.variance_epsilon = 1e-6
+
+        def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+            variance = inputs.pow(2).mean(dim=-1, keepdim=True)
+            return inputs * torch.rsqrt(variance + self.variance_epsilon) * self.weight
+
+    class TinyNormModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.input_layernorm = TinyRMSNorm()
+            self.proj = nn.Linear(5, 3)
+
+        def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+            return self.proj(self.input_layernorm(inputs))
+
+    torch.manual_seed(16)
+    source = TinyNormModel().eval()
+    inputs = torch.randn(2, 4, 5)
+    encoded = encode_model(source, max_bits=8, optimize_prefix_bits=(6, 8))
+
+    level1 = copy.deepcopy(source).eval()
+    materialize_prefix(level1, encoded, bits=6)
+    level2, report = build_level2_model(
+        source,
+        encoded,
+        bits=6,
+        linear_backend="native-cpu",
+        qwen_norm_backend="native-cpu",
+    )
+    level2.eval()
+
+    assert report.replaced_modules == ("input_layernorm", "proj")
+    assert isinstance(level2.input_layernorm, NativeRMSNorm)
     torch.testing.assert_close(level2(inputs), level1(inputs), rtol=1e-5, atol=1e-5)
