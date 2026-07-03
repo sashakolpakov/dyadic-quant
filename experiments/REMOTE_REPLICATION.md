@@ -53,6 +53,31 @@ should not be modified. The small LLM eval files `wikitext2_test.txt` and
 `arc_easy.json` are still expected under `data/llm_eval` or the directory passed
 with `--data-dir`.
 
+## One-Command Remote Run
+
+From your local checkout, this does the full remote orchestration:
+
+```bash
+./dyadic-remote-experiments.sh ubuntu@A10_HOST --level all --threads 30
+```
+
+It will:
+
+- rsync the repo to `/home/ubuntu/dyadic-quant`;
+- rsync `data/llm_eval/`;
+- build the `dyadic-experiments` Docker image on the remote;
+- run the requested Level 1/Level 2 suite in Docker;
+- fetch `results/level1/<run-id>/` and `results/level2/<run-id>/` locally;
+- rerun the Level 2 audit locally into `results/level2/<run-id>/evidence_local/`.
+
+Useful variants:
+
+```bash
+./dyadic-remote-experiments.sh ubuntu@A10_HOST --level 2 --quick --threads 30
+./dyadic-remote-experiments.sh ubuntu@A10_HOST --level all --run-id paper-rerun-001
+./dyadic-remote-experiments.sh ubuntu@A10_HOST --level all --no-build --threads 30
+```
+
 ## Run Level 1
 
 ```bash
