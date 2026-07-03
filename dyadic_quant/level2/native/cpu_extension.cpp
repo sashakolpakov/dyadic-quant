@@ -1352,14 +1352,13 @@ py::dict pack_native_cpu_weight(
     return packed;
 }
 
-at::Tensor dyadic_linear_packed_native_cpu(
+static at::Tensor dyadic_linear_packed_weight_native_cpu(
     const at::Tensor& input_in,
-    const py::dict& packed_dict,
-    py::object bias_obj
+    const PackedDyopWeight& packed,
+    const at::Tensor& bias_tensor_in
 ) {
     auto input = input_in.to(at::kCPU).contiguous();
     TORCH_CHECK(input.scalar_type() == at::kFloat, "native linear input must be CPU float32");
-    auto packed = unpack_weight(packed_dict);
     TORCH_CHECK(input.dim() == 2, "native linear input must be [M, K]");
     TORCH_CHECK(input.size(1) == packed.k, "native linear input width mismatch");
 
@@ -1369,8 +1368,8 @@ at::Tensor dyadic_linear_packed_native_cpu(
     const float* scales = packed.scales.data_ptr<float>();
     const float* bias = nullptr;
     at::Tensor bias_tensor;
-    if (!bias_obj.is_none()) {
-        bias_tensor = bias_obj.cast<at::Tensor>().to(at::kCPU).contiguous();
+    if (bias_tensor_in.defined()) {
+        bias_tensor = bias_tensor_in.to(at::kCPU).contiguous();
         TORCH_CHECK(bias_tensor.scalar_type() == at::kFloat, "bias must be float32");
         TORCH_CHECK(bias_tensor.numel() == packed.out, "bias width mismatch");
         bias = bias_tensor.data_ptr<float>();
@@ -1498,6 +1497,19 @@ at::Tensor dyadic_linear_packed_native_cpu(
     return output;
 }
 
+at::Tensor dyadic_linear_packed_native_cpu(
+    const at::Tensor& input_in,
+    const py::dict& packed_dict,
+    py::object bias_obj
+) {
+    auto packed = unpack_weight(packed_dict);
+    at::Tensor bias_tensor;
+    if (!bias_obj.is_none()) {
+        bias_tensor = bias_obj.cast<at::Tensor>();
+    }
+    return dyadic_linear_packed_weight_native_cpu(input_in, packed, bias_tensor);
+}
+
 at::Tensor dyadic_embedding_packed_native_cpu(
     const at::Tensor& indices_in,
     const py::dict& packed_dict
@@ -1569,6 +1581,121 @@ at::Tensor dyadic_embedding_packed_native_cpu(
         });
     }
     return output;
+}
+
+at::Tensor dyadic_qwen_mlp_packed_native_cpu(
+    const at::Tensor& input,
+    const py::dict& gate_packed,
+    const py::dict& up_packed,
+    const py::dict& down_packed,
+    py::object gate_bias,
+    py::object up_bias,
+    py::object down_bias
+) {
+    auto gate = dyadic_linear_packed_native_cpu(input, gate_packed, gate_bias);
+    auto up = dyadic_linear_packed_native_cpu(input, up_packed, up_bias);
+    auto hidden = at::silu(gate).mul_(up);
+    return dyadic_linear_packed_native_cpu(hidden, down_packed, down_bias);
+}
+
+static at::Tensor dyadic_qwen_mlp_packed_weight_native_cpu(
+    const at::Tensor& input,
+    const PackedDyopWeight& gate_packed,
+    const PackedDyopWeight& up_packed,
+    const PackedDyopWeight& down_packed,
+    const at::Tensor& gate_bias,
+    const at::Tensor& up_bias,
+    const at::Tensor& down_bias
+) {
+    auto gate = dyadic_linear_packed_weight_native_cpu(input, gate_packed, gate_bias);
+    auto up = dyadic_linear_packed_weight_native_cpu(input, up_packed, up_bias);
+    auto hidden = at::silu(gate).mul_(up);
+    return dyadic_linear_packed_weight_native_cpu(hidden, down_packed, down_bias);
+}
+
+at::Tensor dyadic_qwen_mlp_stack_packed_native_cpu(
+    const at::Tensor& input,
+    const py::list& blocks
+) {
+    at::Tensor current = input;
+    for (py::handle block_handle : blocks) {
+        py::tuple block = py::cast<py::tuple>(block_handle);
+        TORCH_CHECK(block.size() == 6, "each MLP stack block must contain six items");
+        current = dyadic_qwen_mlp_packed_native_cpu(
+            current,
+            block[0].cast<py::dict>(),
+            block[1].cast<py::dict>(),
+            block[2].cast<py::dict>(),
+            py::reinterpret_borrow<py::object>(block[3]),
+            py::reinterpret_borrow<py::object>(block[4]),
+            py::reinterpret_borrow<py::object>(block[5])
+        );
+    }
+    return current;
+}
+
+struct PlannedMlpBlock {
+    PackedDyopWeight gate_packed;
+    PackedDyopWeight up_packed;
+    PackedDyopWeight down_packed;
+    at::Tensor gate_bias;
+    at::Tensor up_bias;
+    at::Tensor down_bias;
+};
+
+struct PlannedMlpStack {
+    std::vector<PlannedMlpBlock> blocks;
+};
+
+py::capsule pack_qwen_mlp_stack_native_cpu(const py::list& blocks) {
+    auto* plan = new PlannedMlpStack();
+    plan->blocks.reserve(blocks.size());
+    for (py::handle block_handle : blocks) {
+        py::tuple block = py::cast<py::tuple>(block_handle);
+        TORCH_CHECK(block.size() == 6, "each MLP stack block must contain six items");
+        auto maybe_bias = [](py::handle value) -> at::Tensor {
+            if (value.is_none()) return at::Tensor();
+            return py::reinterpret_borrow<py::object>(value).cast<at::Tensor>();
+        };
+        plan->blocks.push_back(PlannedMlpBlock{
+            unpack_weight(block[0].cast<py::dict>()),
+            unpack_weight(block[1].cast<py::dict>()),
+            unpack_weight(block[2].cast<py::dict>()),
+            maybe_bias(block[3]),
+            maybe_bias(block[4]),
+            maybe_bias(block[5]),
+        });
+    }
+    return py::capsule(plan, "dyadic_qwen_mlp_stack_plan", [](PyObject* capsule) {
+        py::gil_scoped_acquire gil;
+        auto* ptr = static_cast<PlannedMlpStack*>(
+            PyCapsule_GetPointer(capsule, "dyadic_qwen_mlp_stack_plan")
+        );
+        delete ptr;
+    });
+}
+
+at::Tensor dyadic_qwen_mlp_stack_plan_native_cpu(
+    const at::Tensor& input,
+    py::capsule plan_capsule
+) {
+    auto* plan = static_cast<PlannedMlpStack*>(
+        PyCapsule_GetPointer(plan_capsule.ptr(), "dyadic_qwen_mlp_stack_plan")
+    );
+    TORCH_CHECK(plan != nullptr, "invalid Qwen MLP stack plan");
+    at::Tensor current = input;
+    for (const PlannedMlpBlock& block : plan->blocks) {
+        current = dyadic_qwen_mlp_packed_weight_native_cpu(
+            current,
+            block.gate_packed,
+            block.up_packed,
+            block.down_packed,
+            block.gate_bias,
+            block.up_bias,
+            block.down_bias
+        );
+    }
+    return current;
 }
 
 at::Tensor dyadic_conv2d_packed_native_cpu(
@@ -1790,6 +1917,14 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           "Level 2 linear forward on packed dyop weight (CPU)");
     m.def("dyadic_embedding_packed_native_cpu", &dyadic_embedding_packed_native_cpu,
           "Level 2 embedding forward on packed dyop weight (CPU)");
+    m.def("dyadic_qwen_mlp_packed_native_cpu", &dyadic_qwen_mlp_packed_native_cpu,
+          "Bundled Qwen MLP forward on packed dyop weights (CPU)");
+    m.def("dyadic_qwen_mlp_stack_packed_native_cpu", &dyadic_qwen_mlp_stack_packed_native_cpu,
+          "Bundled stack of Qwen MLP forwards on packed dyop weights (CPU)");
+    m.def("pack_qwen_mlp_stack_native_cpu", &pack_qwen_mlp_stack_native_cpu,
+          "Create a reusable native Qwen MLP stack plan");
+    m.def("dyadic_qwen_mlp_stack_plan_native_cpu", &dyadic_qwen_mlp_stack_plan_native_cpu,
+          "Run a reusable native Qwen MLP stack plan");
     m.def("dyadic_conv2d_packed_native_cpu", &dyadic_conv2d_packed_native_cpu,
           "Level 2 conv2d forward on packed dyop weight (CPU)");
     m.def("native_add_relu_cpu", &native_add_relu_cpu,

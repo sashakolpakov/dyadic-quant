@@ -77,6 +77,10 @@ def warm_native_cpu_workers() -> None:
 
 dyadic_linear_packed_native_cpu = _LazyNative("dyadic_linear_packed_native_cpu")
 dyadic_embedding_packed_native_cpu = _LazyNative("dyadic_embedding_packed_native_cpu")
+dyadic_qwen_mlp_packed_native_cpu = _LazyNative("dyadic_qwen_mlp_packed_native_cpu")
+dyadic_qwen_mlp_stack_packed_native_cpu = _LazyNative("dyadic_qwen_mlp_stack_packed_native_cpu")
+dyadic_qwen_mlp_stack_plan_native_cpu = _LazyNative("dyadic_qwen_mlp_stack_plan_native_cpu")
+pack_qwen_mlp_stack_native_cpu = _LazyNative("pack_qwen_mlp_stack_native_cpu")
 dyadic_conv2d_packed_native_cpu = _LazyNative("dyadic_conv2d_packed_native_cpu")
 pack_native_cpu_weight = _LazyNative("pack_native_cpu_weight")
 native_add_relu_cpu = _LazyNative("native_add_relu_cpu")

@@ -29,6 +29,10 @@ Current entrypoint:
 - `profile_qwen_depth.py`: measures complete Qwen forwards and native dyop
   module time by sequence length. This captures the depth cost that remains
   after wide AVX kernels pass their isolated gate.
+- `benchmark_qwen_mlp_flow.py`: compares disjoint native dyop Linear calls
+  against bundled Qwen-style MLP flow. The bundled plan stores packed dyadic
+  weights in native C++ objects and executes a short MLP stack without decoding
+  weights.
 - `dyop_primitives.json`: primitive catalog below layer kernels. It defines
   dyop packing, tiling, microkernel, scale/bias, writeback, elementwise, and
   reduction primitives and maps them to architecture profiles such as
