@@ -29,6 +29,10 @@ Current entrypoint:
 - `profile_qwen_depth.py`: measures complete Qwen forwards and native dyop
   module time by sequence length. This captures the depth cost that remains
   after wide AVX kernels pass their isolated gate.
+- `sweep_qwen_depth_backends.py`: runs Qwen depth profiles across native
+  backend islands such as the packed MLP plan and native RMSNorm, then writes a
+  compact full-forward timing comparison. Use it before exposing a new
+  Axiom-style fused boundary in the model builder.
 - `benchmark_qwen_mlp_flow.py`: compares disjoint native dyop Linear calls
   against bundled Qwen-style MLP flow. The bundled plan stores packed dyadic
   weights in native C++ objects and executes a short MLP stack without decoding
