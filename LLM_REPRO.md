@@ -32,6 +32,26 @@ Qwen native kernel evidence:
 | `output_projection` | 100.159 | 4.251 | 23.56x |
 | `qwen_vocab_width` | 0.121 | 0.083 | 1.47x |
 
+## Depth Throughput
+
+The kernel table proves the wide AVX dyop kernels on representative Qwen
+shapes. It does not prove the current full-network execution path is optimal.
+Today Level 2 still runs inside the Transformers/PyTorch module graph, so every
+layer crosses Python/PyTorch boundaries around native Linear and Embedding
+calls. That is the open depth problem.
+
+The runner now writes `results/level2/<run-id>/depth/qwen_depth_profile.csv`.
+Use that file to separate:
+
+- wide kernel time, from `results/level2/<run-id>/kernels/qwen_native_kernels.csv`;
+- full forward and per-module depth time, from `depth/qwen_depth_profile.csv`;
+- quality evidence, from `qwen_native/qwen25_level2_native_cpu_results.csv`.
+
+The next Level 2 optimization target is a native Qwen block runner that keeps
+hidden-state tensors and per-layer intermediates inside C++ across RMSNorm,
+attention projections, attention reductions, MLP projections, and residual
+adds.
+
 ## Command
 
 Use the Docker runner on the remote:

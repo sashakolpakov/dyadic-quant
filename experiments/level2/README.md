@@ -23,14 +23,12 @@ Current entrypoint:
   `--conv-backend native-cpu` to execute Conv2d through the compiled CPU
   microkernel.
 - `benchmark_native_kernels.py`: measures native dyop embedding, dense linear
-  family, output projection, and Conv2d kernels against materialized CPU Torch
-  baselines on representative Qwen/ResNet-like shapes. This is the first gate
-  for dyop-kernel supremacy before expensive full-model metric reruns.
-- `benchmark_resnet_speed_gate.py`: runs the Level 2 ResNet stop/go speed gate.
-  It compares materialized dyadic CPU tensors, materialized dyadic MPS tensors
-  when MPS is available, and native dyop CPU execution over an isolated worker
-  sweep. Use this before any expensive ResNet quality run; if the native dyop
-  rows do not pass the speed gate, fix kernels first.
+  family, and output projection kernels against materialized CPU Torch baselines
+  on representative Qwen shapes. This is the first gate for dyop-kernel
+  supremacy before expensive full-model metric reruns.
+- `profile_qwen_depth.py`: measures complete Qwen forwards and native dyop
+  module time by sequence length. This captures the depth cost that remains
+  after wide AVX kernels pass their isolated gate.
 - `dyop_primitives.json`: primitive catalog below layer kernels. It defines
   dyop packing, tiling, microkernel, scale/bias, writeback, elementwise, and
   reduction primitives and maps them to architecture profiles such as
@@ -46,29 +44,30 @@ Current entrypoint:
   dyop modules into a Level 2 generations JSON so cosine and LLM-judge scoring
   can be repeated without mixing Level 1 materialized textual artifacts.
 
-Current speed artifacts:
+Current Level 2 LLM interpretation:
 
-- `results/level2/resnet_speed_gate_bits6_neon_dot_active_r8.csv`: full ResNet
-  synthetic latency gate for the current active kernels. On the current local
-  runtime, MPS is unavailable and native dyops scale from one to twelve workers
-  but still fail against materialized CPU tensors.
-- `results/level2/native_kernels_cleaned_primitives_bits6_r30.csv`: focused
-  kernel benchmark after removing failed experimental microkernels and
-  restoring the active ARM64/NEON packed-row dot path. GEMV and
-  output-projection GEMV pass; GEMM, embedding, and Conv2d still need primitive
-  work.
-- `results/level2/native_conv2d_cleaned_primitives_bits6_r20.csv`: Conv2d-only
-  benchmark after cleanup.
-- `results/level2/subkernel_speed_gates_cleaned_primitives.csv`: combined subkernel gate
-  report. Current passing subkernels are GEMV, output-projection GEMV, ReLU,
-  add, add+ReLU, and MaxPool2d. Current failing subkernels are GEMM,
-  output-projection GEMM, embedding, all measured Conv2d shapes, and standalone
-  AdaptiveAvgPool2d.
-- `results/level2/metal_gate_results.csv`: Metal GPU gate pass/fail for
-  outproj, GEMM, embedding, and global pool. Outproj passes (6.15ms vs 10.84ms
-  gate); GEMM (1.01ms vs 0.19ms), embedding (0.64ms vs 0.04ms), and pool
-  (0.047ms vs 0.003ms) fail.
-- `results/level2/metal_shmoo_tk16.csv`, `tk32.csv`, `tk64.csv`: Metal kernel
-  tile-size shmoo. TK=16 is best; TK=32 and TK=64 are 1.2× and 1.5× slower.
-- `results/level2/metal_shmoo_padded_bank_conflict.csv`: bank-conflict
-  mitigation test (padding to 17) — no measurable improvement vs unpadded.
+- The kernel CSV is the width gate: it asks whether representative AVX native
+  dyop kernels beat materialized Torch tensors for Qwen shapes.
+- The depth CSV is the full-network execution probe: it asks how much time is
+  lost crossing Python/PyTorch module boundaries and running the 24-layer graph.
+- The quality CSV is the compression/accuracy evidence: it asks whether each
+  dyadic bit width preserves Qwen perplexity, next-token agreement, and ARC
+  behavior.
+
+The next performance target is not another isolated GEMM tile. It is a native
+Qwen block runner that keeps hidden states and layer intermediates in C++ across
+RMSNorm, attention projections, attention reductions, MLP projections, and
+residual adds.
+
+Current LLM artifacts:
+
+- `results/level2/<run-id>/kernels/qwen_native_kernels.csv`: isolated AVX
+  width-kernel evidence.
+- `results/level2/<run-id>/qwen_native/qwen25_level2_native_cpu_results.csv`:
+  full Qwen quality, memory, ARC, and Wikitext evidence.
+- `results/level2/<run-id>/depth/qwen_depth_profile.csv`: full-forward and
+  per-module depth timing.
+- `results/level2/<run-id>/textual/qwen25_dyop_generations.json`: optional
+  Level 2 native textual generations.
+- `results/level2/<run-id>/evidence/native_evidence_audit.md`: combined audit
+  summary.
