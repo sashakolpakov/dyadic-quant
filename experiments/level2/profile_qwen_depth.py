@@ -164,6 +164,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--threads", type=int, default=None)
     parser.add_argument("--load-dyadic", type=Path)
+    parser.add_argument(
+        "--include-source",
+        action="store_true",
+        help="Also time the original CPU Transformers model before Level 2 native.",
+    )
     parser.add_argument("--output", type=Path, default=Path("results/level2/qwen_depth_profile.csv"))
     return parser.parse_args()
 
@@ -183,6 +188,30 @@ def main() -> None:
         dtype=torch.float32,
         attn_implementation="eager",
     ).eval()
+
+    if args.include_source:
+        for sequence_length in args.sequence_lengths:
+            input_ids = torch.full(
+                (1, sequence_length),
+                fill_value=tokenizer.eos_token_id,
+                dtype=torch.long,
+            )
+            forward_once(model, input_ids)
+            forward_ms = [
+                forward_once(model, input_ids) for _ in range(args.repeats)
+            ]
+            write_rows(
+                args.output,
+                backend="transformers-source-cpu",
+                sequence_length=sequence_length,
+                repeats=args.repeats,
+                forward_ms=forward_ms,
+                timings={},
+            )
+            print(
+                f"source seq={sequence_length}: avg_forward_ms="
+                f"{sum(forward_ms) / max(1, len(forward_ms)):.3f}"
+            )
 
     encoded = (
         load_encoded_model(args.load_dyadic)
