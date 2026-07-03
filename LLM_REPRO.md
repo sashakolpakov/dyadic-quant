@@ -79,6 +79,11 @@ docker run --gpus all --ipc=host --rm \
   dyadic-experiments --level all --threads 30
 ```
 
+Level 2 defaults to the current native depth islands:
+`--qwen-mlp-backend native-cpu-plan` and `--qwen-norm-backend native-cpu`.
+It also writes `depth/qwen_depth_backend_sweep.csv`, which compares those
+islands against the plain native Linear/Embedding path.
+
 For a fast smoke:
 
 ```bash

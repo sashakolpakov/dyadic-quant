@@ -24,6 +24,8 @@ JUDGE_MODEL="${DYADIC_JUDGE_MODEL:-gemma3:4b}"
 JUDGE_TIMEOUT=180
 JUDGE_BATCH_SIZE=1
 LEVEL1_GENERATIONS=""
+QWEN_MLP_BACKEND="native-cpu-plan"
+QWEN_NORM_BACKEND="native-cpu"
 AUDIT_STRICT=0
 MIN_QWEN_AGREEMENT=""
 MAX_QWEN_PERPLEXITY_RATIO=""
@@ -61,6 +63,10 @@ Options:
   --judge-batch-size N         Variants per judge call.
   --no-judge                   Compute lexical/cosine metrics without judge calls.
   --level1-generations FILE    Level 1 generations file used to seed Level 2 text.
+  --qwen-mlp-backend torch|native-cpu-plan
+                               Level 2 Qwen MLP backend (default: native-cpu-plan).
+  --qwen-norm-backend torch|native-cpu
+                               Level 2 Qwen RMSNorm backend (default: native-cpu).
   --strict-audit               Exit nonzero when the native evidence audit has issues.
   --min-qwen-agreement VALUE   Audit threshold for next-token agreement.
   --max-qwen-perplexity-ratio VALUE
@@ -166,6 +172,14 @@ while [[ $# -gt 0 ]]; do
       LEVEL1_GENERATIONS="$2"
       shift 2
       ;;
+    --qwen-mlp-backend)
+      QWEN_MLP_BACKEND="$2"
+      shift 2
+      ;;
+    --qwen-norm-backend)
+      QWEN_NORM_BACKEND="$2"
+      shift 2
+      ;;
     --strict-audit)
       AUDIT_STRICT=1
       shift
@@ -202,6 +216,20 @@ case "$LEVEL" in
   1|2|all) ;;
   *)
     echo "--level must be 1, 2, or all" >&2
+    exit 2
+    ;;
+esac
+case "$QWEN_MLP_BACKEND" in
+  torch|native-cpu-plan) ;;
+  *)
+    echo "--qwen-mlp-backend must be torch or native-cpu-plan" >&2
+    exit 2
+    ;;
+esac
+case "$QWEN_NORM_BACKEND" in
+  torch|native-cpu) ;;
+  *)
+    echo "--qwen-norm-backend must be torch or native-cpu" >&2
     exit 2
     ;;
 esac
@@ -430,6 +458,8 @@ run_level2_textual() {
         --skip-source-generation \
         --load-dyadic "$LEVEL2_DIR/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
         --generations-file "$generations" \
+        --qwen-mlp-backend "$QWEN_MLP_BACKEND" \
+        --qwen-norm-backend "$QWEN_NORM_BACKEND" \
         --skip-speed-gate-check
   else
     run_step level2_qwen_textual_generation \
@@ -445,6 +475,8 @@ run_level2_textual() {
         --dyop-prefix dyop_native \
         --load-dyadic "$LEVEL2_DIR/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
         --generations-file "$generations" \
+        --qwen-mlp-backend "$QWEN_MLP_BACKEND" \
+        --qwen-norm-backend "$QWEN_NORM_BACKEND" \
         --skip-speed-gate-check
   fi
   local compare=(
@@ -529,6 +561,8 @@ run_level2() {
       --execution-backend level2-native \
       --level2-linear-backend native-cpu \
       --level2-embedding-backend native-cpu \
+      --qwen-mlp-backend "$QWEN_MLP_BACKEND" \
+      --qwen-norm-backend "$QWEN_NORM_BACKEND" \
       --skip-speed-gate-check \
       --variant-name qwen25_level2_native_cpu \
       --save-dyadic "$out/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
@@ -541,8 +575,22 @@ run_level2() {
       --sequence-lengths "${DEPTH_PROFILE_SEQUENCE_LENGTHS[@]}" \
       --repeats "$DEPTH_PROFILE_REPEATS" \
       --threads "$THREADS" \
+      --qwen-mlp-backend "$QWEN_MLP_BACKEND" \
+      --qwen-norm-backend "$QWEN_NORM_BACKEND" \
       --load-dyadic "$out/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
       --output "$out/depth/qwen_depth_profile.csv"
+  run_step level2_qwen_depth_backend_sweep \
+    env DYOP_CPU_THREADS="$THREADS" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    "$PYTHON_BIN" experiments/level2/sweep_qwen_depth_backends.py \
+      --model-dir "$MODEL_DIR" \
+      --bits 6 \
+      --sequence-lengths "${DEPTH_PROFILE_SEQUENCE_LENGTHS[@]}" \
+      --batch-sizes 1 \
+      --repeats "$DEPTH_PROFILE_REPEATS" \
+      --threads "$THREADS" \
+      --load-dyadic "$out/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
+      --output "$out/depth/qwen_depth_backend_sweep.csv" \
+      --keep-raw-dir "$out/depth/backend_sweep_raw"
   if textual_available; then
     run_level2_textual
   fi
@@ -580,6 +628,8 @@ payload = {
     "level2_dir": "$LEVEL2_DIR",
     "model_dir": "$MODEL_DIR",
     "data_dir": "$DATA_DIR",
+    "qwen_mlp_backend": "$QWEN_MLP_BACKEND",
+    "qwen_norm_backend": "$QWEN_NORM_BACKEND",
     "audit_strict": bool(int("$AUDIT_STRICT")),
     "audit_thresholds": {
         "min_qwen_agreement": "$MIN_QWEN_AGREEMENT" or None,
