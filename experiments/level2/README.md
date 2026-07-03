@@ -80,9 +80,10 @@ stores packed dyadic weights and now reuses a per-block activation workspace.
 Qwen-style MLP modules by replacing `gate_proj/up_proj/down_proj + SiLU` with a
 single packed native plan. `qwen_norm_backend="native-cpu"` also replaces
 Qwen-style RMSNorm modules with native CPU execution over the hidden-state
-flow. The next step is to lift this from separate MLP/norm native islands into
-a Qwen block plan with RMSNorm, residual adds, QKV/O projection flow, attention,
-and MLP in one cached execution boundary.
+flow. A partial decoder-layer wrapper that only fused post-attention residual
+add plus RMSNorm was tested and removed because it slowed the full Qwen path;
+the next block-level attempt should fuse a larger boundary with QKV/O
+projection flow, attention, residuals, and MLP in one cached execution boundary.
 
 Current LLM artifacts:
 
