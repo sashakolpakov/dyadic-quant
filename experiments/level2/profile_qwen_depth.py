@@ -194,6 +194,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only write full-forward rows for Level 2 native timing.",
     )
+    parser.add_argument(
+        "--qwen-mlp-backend",
+        choices=["torch", "native-cpu-plan"],
+        default="torch",
+        help="Fuse Qwen MLP projections into a reusable native packed plan.",
+    )
     parser.add_argument("--output", type=Path, default=Path("results/level2/qwen_depth_profile.csv"))
     return parser.parse_args()
 
@@ -276,9 +282,13 @@ def main() -> None:
         dtype=torch.float32,
         linear_backend="native-cpu",
         embedding_backend="native-cpu",
+        qwen_mlp_backend=args.qwen_mlp_backend,
     )
     native_model.eval()
-    print(f"Profiling {len(replacement.replaced_modules)} Level 2 native modules")
+    print(
+        f"Profiling {len(replacement.replaced_modules)} Level 2 native modules "
+        f"and {len(replacement.fused_modules)} fused modules"
+    )
 
     for sequence_length in args.sequence_lengths:
         for batch_size in args.batch_sizes:

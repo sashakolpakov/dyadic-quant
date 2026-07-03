@@ -19,12 +19,18 @@ from dyadic_quant.level2.dyops import (
     native_relu_cpu,
     pack_native_weight,
 )
+from dyadic_quant.level2.native import (
+    build_native_cpu,
+    dyadic_qwen_mlp_stack_plan_native_cpu,
+    pack_qwen_mlp_stack_native_cpu,
+)
 
 
 @dataclass
 class NativeCPUReplacement:
     replaced_modules: tuple[str, ...] = ()
     shared_weight_modules: tuple[str, ...] = ()
+    fused_modules: tuple[str, ...] = ()
 
 
 class DyadicLinear(nn.Module):
@@ -70,6 +76,48 @@ class DyadicLinear(nn.Module):
             bias=getattr(self, "bias", None),
             bits=self.bits,
         )
+
+
+class DyadicQwenMLPNative(nn.Module):
+    def __init__(
+        self,
+        *,
+        gate_proj: DyadicLinear,
+        up_proj: DyadicLinear,
+        down_proj: DyadicLinear,
+    ) -> None:
+        super().__init__()
+        self.gate_proj = gate_proj
+        self.up_proj = up_proj
+        self.down_proj = down_proj
+        self._native_plan: object | None = None
+
+    def _plan(self) -> object:
+        if self._native_plan is None:
+            build_native_cpu()
+            self._native_plan = pack_qwen_mlp_stack_native_cpu(
+                [
+                    (
+                        self.gate_proj._native_packed_weight(),
+                        self.up_proj._native_packed_weight(),
+                        self.down_proj._native_packed_weight(),
+                        getattr(self.gate_proj, "bias", None),
+                        getattr(self.up_proj, "bias", None),
+                        getattr(self.down_proj, "bias", None),
+                    )
+                ]
+            )
+        return self._native_plan
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        if inputs.ndim <= 2:
+            return dyadic_qwen_mlp_stack_plan_native_cpu(inputs, self._plan())
+        original_shape = inputs.shape[:-1]
+        output = dyadic_qwen_mlp_stack_plan_native_cpu(
+            inputs.reshape(-1, inputs.shape[-1]),
+            self._plan(),
+        )
+        return output.reshape(*original_shape, output.shape[-1])
 
 
 class DyadicEmbedding(nn.Module):
@@ -231,6 +279,7 @@ def build_level2_model(
     conv_backend: str = "scalar",
     embedding_backend: str = "scalar",
     spatial_backend: str = "torch",
+    qwen_mlp_backend: str = "torch",
     overrides: dict[str, int] | None = None,
 ) -> tuple[nn.Module, NativeCPUReplacement]:
     overrides = overrides or {}
@@ -239,11 +288,16 @@ def build_level2_model(
     _validate_backend(embedding_backend, "embedding")
     if spatial_backend not in ("torch", "native-cpu"):
         raise ValueError("spatial_backend must be 'torch' or 'native-cpu'")
+    if qwen_mlp_backend not in ("torch", "native-cpu-plan"):
+        raise ValueError("qwen_mlp_backend must be 'torch' or 'native-cpu-plan'")
+    if qwen_mlp_backend == "native-cpu-plan" and linear_backend != "native-cpu":
+        raise ValueError("qwen_mlp_backend='native-cpu-plan' requires native-cpu Linear")
     encoded_map: dict[str, DyadicTensor] = {
         item.name: item.tensor for item in encoded.modules
     }
     replaced_modules: list[str] = []
     shared_weight_modules: list[str] = []
+    fused_modules: list[str] = []
 
     candidate = copy.deepcopy(base_model)
     all_modules = dict(candidate.named_modules())
@@ -296,9 +350,22 @@ def build_level2_model(
         _replace_module(candidate, name, dyadic_module)
         replaced_modules.append(name)
 
+    if qwen_mlp_backend == "native-cpu-plan":
+        all_modules = dict(candidate.named_modules())
+        for name, module in list(all_modules.items()):
+            fused = _maybe_qwen_mlp_native(module)
+            if fused is None:
+                continue
+            if name:
+                _replace_module(candidate, name, fused)
+            else:
+                candidate = fused
+            fused_modules.append(name)
+
     replacement = NativeCPUReplacement(
         replaced_modules=tuple(replaced_modules),
         shared_weight_modules=tuple(shared_weight_modules),
+        fused_modules=tuple(fused_modules),
     )
     return candidate, replacement
 
@@ -313,6 +380,39 @@ def _replace_module(
     for part in parts[:-1]:
         parent = getattr(parent, part)
     setattr(parent, parts[-1], new_module)
+
+
+def _maybe_qwen_mlp_native(module: nn.Module) -> DyadicQwenMLPNative | None:
+    gate_proj = getattr(module, "gate_proj", None)
+    up_proj = getattr(module, "up_proj", None)
+    down_proj = getattr(module, "down_proj", None)
+    if not (
+        isinstance(gate_proj, DyadicLinear)
+        and isinstance(up_proj, DyadicLinear)
+        and isinstance(down_proj, DyadicLinear)
+    ):
+        return None
+    if not _is_silu_activation(getattr(module, "act_fn", None)):
+        return None
+    if gate_proj.linear_backend != "native-cpu":
+        return None
+    if up_proj.linear_backend != "native-cpu":
+        return None
+    if down_proj.linear_backend != "native-cpu":
+        return None
+    return DyadicQwenMLPNative(
+        gate_proj=gate_proj,
+        up_proj=up_proj,
+        down_proj=down_proj,
+    )
+
+
+def _is_silu_activation(act_fn: object) -> bool:
+    if isinstance(act_fn, nn.SiLU):
+        return True
+    name = getattr(act_fn, "__name__", "")
+    class_name = act_fn.__class__.__name__.lower()
+    return name in {"silu", "silu_activation"} or "silu" in class_name
 
 
 def _validate_backend(backend: str, label: str) -> str:

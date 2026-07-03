@@ -72,6 +72,12 @@ def parse_args() -> argparse.Namespace:
         default="native-cpu",
     )
     parser.add_argument(
+        "--qwen-mlp-backend",
+        choices=["torch", "native-cpu-plan"],
+        default="torch",
+        help="Fuse Qwen MLP projections into a reusable native packed plan.",
+    )
+    parser.add_argument(
         "--generations-file",
         type=Path,
         default=Path("results/level2/qwen25_dyop_generations.json"),
@@ -193,6 +199,7 @@ def main() -> None:
             dtype=torch.float32,
             linear_backend=args.linear_backend,
             embedding_backend=args.embedding_backend,
+            qwen_mlp_backend=args.qwen_mlp_backend,
         )
         candidate.eval().to(device)
         variant = f"{args.dyop_prefix}_{bits}"
@@ -210,7 +217,7 @@ def main() -> None:
         )
         print(
             f"Generated '{variant}' with {len(replacement.replaced_modules)} "
-            "Level 2 modules"
+            f"Level 2 modules and {len(replacement.fused_modules)} fused modules"
         )
         del candidate
 

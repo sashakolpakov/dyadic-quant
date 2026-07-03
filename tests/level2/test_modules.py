@@ -13,6 +13,7 @@ from dyadic_quant.level2 import (
     DyadicConv2d,
     DyadicEmbedding,
     DyadicLinear,
+    DyadicQwenMLPNative,
     build_level2_model,
 )
 
@@ -130,3 +131,39 @@ def test_level2_model_executes_loaded_packed_artifact(tmp_path):
 
     assert report.replaced_modules == ("0", "1", "3")
     torch.testing.assert_close(level2(tokens), level1(tokens), rtol=1e-6, atol=1e-6)
+
+
+def test_level2_qwen_mlp_native_plan_matches_materialized_forward():
+    class TinyQwenMLP(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.gate_proj = nn.Linear(4, 7)
+            self.up_proj = nn.Linear(4, 7)
+            self.down_proj = nn.Linear(7, 4)
+            self.act_fn = torch.nn.functional.silu
+
+        def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+            return self.down_proj(
+                self.act_fn(self.gate_proj(inputs)) * self.up_proj(inputs)
+            )
+
+    torch.manual_seed(15)
+    source = TinyQwenMLP().eval()
+    inputs = torch.randn(2, 3, 4)
+    encoded = encode_model(source, max_bits=8, optimize_prefix_bits=(6, 8))
+
+    level1 = copy.deepcopy(source).eval()
+    materialize_prefix(level1, encoded, bits=6)
+    level2, report = build_level2_model(
+        source,
+        encoded,
+        bits=6,
+        linear_backend="native-cpu",
+        qwen_mlp_backend="native-cpu-plan",
+    )
+    level2.eval()
+
+    assert report.replaced_modules == ("gate_proj", "up_proj", "down_proj")
+    assert report.fused_modules == ("",)
+    assert isinstance(level2, DyadicQwenMLPNative)
+    torch.testing.assert_close(level2(inputs), level1(inputs), rtol=1e-5, atol=1e-5)

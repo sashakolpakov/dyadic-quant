@@ -21,6 +21,7 @@ from dyadic_quant.level2.modules import (
     DyadicConv2d,
     DyadicEmbedding,
     DyadicLinear,
+    DyadicQwenMLPNative,
     NativeMaxPool2d,
     NativeCPUReplacement,
     NativeReLU,

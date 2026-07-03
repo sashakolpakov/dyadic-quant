@@ -76,9 +76,11 @@ Axiom design points to reuse:
 
 The current packed Qwen MLP stack plan applies the third point: the native plan
 stores packed dyadic weights and now reuses a per-block activation workspace.
-The next step is to lift this from an MLP-only plan into a Qwen block plan with
-RMSNorm, residual adds, QKV/O projection flow, attention, and MLP in one cached
-execution boundary.
+`build_level2_model(..., qwen_mlp_backend="native-cpu-plan")` wires this into
+Qwen-style MLP modules by replacing `gate_proj/up_proj/down_proj + SiLU` with a
+single packed native plan. The next step is to lift this from an MLP-only plan
+into a Qwen block plan with RMSNorm, residual adds, QKV/O projection flow,
+attention, and MLP in one cached execution boundary.
 
 Current LLM artifacts:
 

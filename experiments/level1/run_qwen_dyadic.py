@@ -345,6 +345,12 @@ def parse_args() -> argparse.Namespace:
         help="Level 2 backend for embedding lookup modules.",
     )
     parser.add_argument(
+        "--qwen-mlp-backend",
+        choices=["torch", "native-cpu-plan"],
+        default="torch",
+        help="Fuse Qwen MLP projections into a reusable native packed plan.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         help=(
@@ -494,6 +500,7 @@ def main() -> None:
         level2_build_ms = 0.0
         level2_replaced_modules: tuple[str, ...] = ()
         level2_shared_weight_modules: tuple[str, ...] = ()
+        level2_fused_modules: tuple[str, ...] = ()
         if args.execution_backend == "materialized":
             candidate = model
             materialization_ms = materialize_prefix(
@@ -509,11 +516,13 @@ def main() -> None:
                 dtype=model_dtype,
                 linear_backend=args.level2_linear_backend,
                 embedding_backend=args.level2_embedding_backend,
+                qwen_mlp_backend=args.qwen_mlp_backend,
             )
             level2_build_ms = (perf_counter() - start) * 1000
             materialization_ms = 0.0
             level2_replaced_modules = replacement.replaced_modules
             level2_shared_weight_modules = replacement.shared_weight_modules
+            level2_fused_modules = replacement.fused_modules
         sizes = storage_bytes(model, encoded, bits=bits, overrides=overrides)
         candidate.to(device)
         warmup_model(candidate, token_ids, device, repeats=args.warmup_repeats)
@@ -570,6 +579,7 @@ def main() -> None:
                 "level2_shared_weight_modules": ",".join(
                     level2_shared_weight_modules
                 ),
+                "level2_fused_modules": ",".join(level2_fused_modules),
                 "arc_easy_accuracy": arc_accuracy,
                 "arc_elapsed_s": arc_elapsed,
                 "effective_bits_per_weight": sizes["total_model_bytes"]

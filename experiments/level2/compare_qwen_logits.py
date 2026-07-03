@@ -33,6 +33,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generate-steps", type=int, default=0)
     parser.add_argument("--module-limit", type=int, default=0)
     parser.add_argument(
+        "--qwen-mlp-backend",
+        choices=["torch", "native-cpu-plan"],
+        default="torch",
+        help="Fuse Qwen MLP projections into a reusable native packed plan.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("results/level2/qwen_logit_equivalence.json"),
@@ -98,6 +104,7 @@ def main() -> None:
         dtype=torch.float32,
         linear_backend="native-cpu",
         embedding_backend="native-cpu",
+        qwen_mlp_backend=args.qwen_mlp_backend,
     )
     level2_build_ms = (perf_counter() - start) * 1000
     level2.eval()
@@ -194,6 +201,7 @@ def main() -> None:
         "level2_build_ms": level2_build_ms,
         "replaced_modules": len(replacement.replaced_modules),
         "shared_weight_modules": list(replacement.shared_weight_modules),
+        "fused_modules": list(replacement.fused_modules),
         "logits": {
             **logit_stats,
             "allclose_rtol1e-5_atol1e-5": bool(
