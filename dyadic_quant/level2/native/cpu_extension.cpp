@@ -1663,6 +1663,15 @@ struct PlannedMlpStack {
     std::vector<PlannedMlpBlock> blocks;
 };
 
+struct PlannedQkvProjection {
+    PackedDyopWeight q_packed;
+    PackedDyopWeight k_packed;
+    PackedDyopWeight v_packed;
+    at::Tensor q_bias;
+    at::Tensor k_bias;
+    at::Tensor v_bias;
+};
+
 py::capsule pack_qwen_mlp_stack_native_cpu(const py::list& blocks) {
     auto* plan = new PlannedMlpStack();
     plan->blocks.reserve(blocks.size());
@@ -1713,6 +1722,50 @@ at::Tensor dyadic_qwen_mlp_stack_plan_native_cpu(
         );
     }
     return current;
+}
+
+py::capsule pack_qwen_qkv_native_cpu(
+    const py::dict& q_packed,
+    const py::dict& k_packed,
+    const py::dict& v_packed,
+    py::object q_bias_obj,
+    py::object k_bias_obj,
+    py::object v_bias_obj
+) {
+    auto maybe_bias = [](py::object value) -> at::Tensor {
+        if (value.is_none()) return at::Tensor();
+        return value.cast<at::Tensor>();
+    };
+    auto* plan = new PlannedQkvProjection{
+        unpack_weight(q_packed),
+        unpack_weight(k_packed),
+        unpack_weight(v_packed),
+        maybe_bias(q_bias_obj),
+        maybe_bias(k_bias_obj),
+        maybe_bias(v_bias_obj),
+    };
+    return py::capsule(plan, "dyadic_qwen_qkv_plan", [](PyObject* capsule) {
+        py::gil_scoped_acquire gil;
+        auto* ptr = static_cast<PlannedQkvProjection*>(
+            PyCapsule_GetPointer(capsule, "dyadic_qwen_qkv_plan")
+        );
+        delete ptr;
+    });
+}
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor> dyadic_qwen_qkv_plan_native_cpu(
+    const at::Tensor& input,
+    py::capsule plan_capsule
+) {
+    auto* plan = static_cast<PlannedQkvProjection*>(
+        PyCapsule_GetPointer(plan_capsule.ptr(), "dyadic_qwen_qkv_plan")
+    );
+    TORCH_CHECK(plan != nullptr, "invalid Qwen QKV plan");
+    return {
+        dyadic_linear_packed_weight_native_cpu(input, plan->q_packed, plan->q_bias),
+        dyadic_linear_packed_weight_native_cpu(input, plan->k_packed, plan->k_bias),
+        dyadic_linear_packed_weight_native_cpu(input, plan->v_packed, plan->v_bias),
+    };
 }
 
 at::Tensor dyadic_conv2d_packed_native_cpu(
@@ -1981,6 +2034,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           "Create a reusable native Qwen MLP stack plan");
     m.def("dyadic_qwen_mlp_stack_plan_native_cpu", &dyadic_qwen_mlp_stack_plan_native_cpu,
           "Run a reusable native Qwen MLP stack plan");
+    m.def("pack_qwen_qkv_native_cpu", &pack_qwen_qkv_native_cpu,
+          "Create a reusable native Qwen QKV projection plan");
+    m.def("dyadic_qwen_qkv_plan_native_cpu", &dyadic_qwen_qkv_plan_native_cpu,
+          "Run a reusable native Qwen QKV projection plan");
     m.def("dyadic_conv2d_packed_native_cpu", &dyadic_conv2d_packed_native_cpu,
           "Level 2 conv2d forward on packed dyop weight (CPU)");
     m.def("native_add_relu_cpu", &native_add_relu_cpu,

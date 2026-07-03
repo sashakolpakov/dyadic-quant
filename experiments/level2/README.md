@@ -84,6 +84,9 @@ flow. A partial decoder-layer wrapper that only fused post-attention residual
 add plus RMSNorm was tested and removed because it slowed the full Qwen path;
 the next block-level attempt should fuse a larger boundary with QKV/O
 projection flow, attention, residuals, and MLP in one cached execution boundary.
+A low-level packed QKV projection plan exists for native experiments, but a
+Qwen attention wrapper using only that QKV boundary was also slower in the full
+model, so it is not exposed as a model-builder backend.
 
 Current LLM artifacts:
 
