@@ -228,6 +228,8 @@ KERNEL_REPEATS=50
 TEXT_ARC_COUNT=20
 TEXT_WIKITEXT_COUNT=10
 TEXT_MAX_NEW_TOKENS=128
+DEPTH_PROFILE_REPEATS=2
+DEPTH_PROFILE_SEQUENCE_LENGTHS=(1 8 64 256)
 
 if [[ "$QUICK" == "1" ]]; then
   QWEN_MAX_TOKENS=1024
@@ -238,6 +240,8 @@ if [[ "$QUICK" == "1" ]]; then
   TEXT_ARC_COUNT=1
   TEXT_WIKITEXT_COUNT=1
   TEXT_MAX_NEW_TOKENS=16
+  DEPTH_PROFILE_REPEATS=1
+  DEPTH_PROFILE_SEQUENCE_LENGTHS=(1 8)
 fi
 
 print_command() {
@@ -497,7 +501,7 @@ run_level1() {
 
 run_level2() {
   local out="$LEVEL2_DIR"
-  mkdir -p "$out/qwen_native" "$out/kernels"
+  mkdir -p "$out/qwen_native" "$out/kernels" "$out/depth"
   maybe_run_ollama "$out" "level2"
   run_step level2_build_native_cpu \
     "$PYTHON_BIN" experiments/level2/build_native_cpu.py --force
@@ -529,6 +533,16 @@ run_level2() {
       --variant-name qwen25_level2_native_cpu \
       --save-dyadic "$out/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
       --output-dir "$out/qwen_native"
+  run_step level2_qwen_depth_profile \
+    env DYOP_CPU_THREADS="$THREADS" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    "$PYTHON_BIN" experiments/level2/profile_qwen_depth.py \
+      --model-dir "$MODEL_DIR" \
+      --bits 6 \
+      --sequence-lengths "${DEPTH_PROFILE_SEQUENCE_LENGTHS[@]}" \
+      --repeats "$DEPTH_PROFILE_REPEATS" \
+      --threads "$THREADS" \
+      --load-dyadic "$out/qwen_native/qwen25_level2_native_cpu.dyadic.pt" \
+      --output "$out/depth/qwen_depth_profile.csv"
   if textual_available; then
     run_level2_textual
   fi

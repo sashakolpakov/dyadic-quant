@@ -16,12 +16,17 @@ results/level2/<run-id>/evidence/native_evidence_audit.json
 results/level2/<run-id>/evidence/native_evidence_audit.md
 results/level2/<run-id>/evidence/qwen_native_evidence.csv
 results/level2/<run-id>/evidence/qwen_kernel_evidence.csv
+results/level2/<run-id>/depth/qwen_depth_profile.csv
 ```
 
 The audit summarizes Qwen memory, perplexity, next-token agreement, ARC
 accuracy, textual cosine/judge metrics when enabled, and native kernel speed
 rows. The audit is informational by default, so the bundle is still created when
 a metric is weak or missing.
+
+The depth profile is separate from the kernel gate. It times complete Qwen
+forwards and the native dyop module calls by sequence length, so wide-kernel
+speed and repeated network-depth overhead are visible as different metrics.
 
 To make the audit fail the Docker run when a quality threshold is missed, add
 `--strict-audit` with explicit cutoffs:
